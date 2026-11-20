@@ -1,3 +1,0 @@
-module.exports=[80473,r=>{"use strict";var e=r.i(62810);r.s(["z",0,e])},4147,r=>{"use strict";var e=r.i(62810);r.s(["z",0,e])},5954,r=>{"use strict";var e=r.i(62810);r.s(["z",0,e])},48886,r=>{"use strict";function e(r){if(!r||"object"!=typeof r||Array.isArray(r))return{};let e={};for(let[s,a]of Object.entries(r))"boolean"==typeof a&&(e[s.includes(".")?s:`${s}.visualizar`]=a);return e}Object.fromEntries(["dashboard","carregamentos","programacoes","rotas","caminhoes","funcionarios","diarias","faltas","relatorios","agendamentos","manutencoes","configuracoes","usuarios","painel"].map(r=>[r,r[0].toUpperCase()+r.slice(1)])),r.s(["w",0,function(r,s,a){return"ADMIN"===r||!0===e(s)[a]},"x",0,e])}];
-
-//# sourceMappingURL=_1vjl_1qzc0mpf._.js.map

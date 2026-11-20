@@ -1,3 +1,0 @@
-{
-  "/api/carregamentos/[id]/nota-fiscal/[itemId]/finalizar/route": "app/api/carregamentos/[id]/nota-fiscal/[itemId]/finalizar/route.js"
-}
