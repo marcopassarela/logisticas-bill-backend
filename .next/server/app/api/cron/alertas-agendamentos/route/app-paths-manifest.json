@@ -1,0 +1,3 @@
+{
+  "/api/cron/alertas-agendamentos/route": "app/api/cron/alertas-agendamentos/route.js"
+}

@@ -1,0 +1,3 @@
+{
+  "/api/auth/presence/leave/route": "app/api/auth/presence/leave/route.js"
+}

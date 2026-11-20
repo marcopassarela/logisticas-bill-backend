@@ -1,0 +1,3 @@
+{
+  "/api/carregamentos/[id]/itens/[itemId]/nota-fiscal/route": "app/api/carregamentos/[id]/itens/[itemId]/nota-fiscal/route.js"
+}

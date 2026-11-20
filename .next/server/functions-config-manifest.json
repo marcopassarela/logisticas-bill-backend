@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "functions": {
+    "/api/cron/alertas-agendamentos": {},
+    "/api/cron/lembretes": {
+      "maxDuration": 30
+    },
+    "/api/health/database": {},
+    "/api/realtime/auth": {}
+  }
+}

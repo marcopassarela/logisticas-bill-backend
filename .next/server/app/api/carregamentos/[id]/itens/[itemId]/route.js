@@ -1,0 +1,13 @@
+var R=require("../../../../../../chunks/[turbopack]_runtime.js")("server/app/api/carregamentos/[id]/itens/[itemId]/route.js")
+R.c("server/chunks/[root-of-the-server]__0eln2cvwj4b9n._.js")
+R.c("server/chunks/[root-of-the-server]__0j0fm1w6lkhwv._.js")
+R.c("server/chunks/_1cb8bdz9q2n94._.js")
+R.c("server/chunks/node_modules_@vercel_blob_dist_index_0_af7u1kf2laq.js")
+R.c("server/chunks/[root-of-the-server]__13iubnm749cpz._.js")
+R.c("server/chunks/[root-of-the-server]__1twsxl06yw5yn._.js")
+R.c("server/chunks/[root-of-the-server]__048f1wnr8pysf._.js")
+R.c("server/chunks/[root-of-the-server]__0pmx4eia95qru._.js")
+R.c("server/chunks/[root-of-the-server]__0xj9_jkos6o65._.js")
+R.c("server/chunks/1oeh_server_app_api_carregamentos_[id]_itens_[itemId]_route_actions_0j5v8be00r3do.js")
+R.m(69238)
+module.exports=R.m(69238).exports

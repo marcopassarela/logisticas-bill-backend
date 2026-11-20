@@ -1,0 +1,11 @@
+var R=require("../../../../../../../chunks/[turbopack]_runtime.js")("server/app/api/carregamentos/[id]/nota-fiscal/[itemId]/upload/route.js")
+R.c("server/chunks/[root-of-the-server]__0y5tpt2brvpvz._.js")
+R.c("server/chunks/[root-of-the-server]__05l2qvtsahhum._.js")
+R.c("server/chunks/[root-of-the-server]__03uy93yizzpdh._.js")
+R.c("server/chunks/[root-of-the-server]__1twsxl06yw5yn._.js")
+R.c("server/chunks/[root-of-the-server]__0pmx4eia95qru._.js")
+R.c("server/chunks/[root-of-the-server]__048f1wnr8pysf._.js")
+R.c("server/chunks/_1pss59wv3nn3z._.js")
+R.c("server/chunks/0ivl_api_carregamentos_[id]_nota-fiscal_[itemId]_upload_route_actions_069exst78y6fq.js")
+R.m(1318)
+module.exports=R.m(1318).exports
