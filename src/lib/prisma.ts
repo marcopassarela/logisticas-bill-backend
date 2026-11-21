@@ -30,7 +30,7 @@ function createPrismaClient(): PrismaClient {
       peak: 0,
       total: 0,
     };
-    
+
     const monitoredFetch: typeof fetch = async (input, init) => {
       stats.active++;
       stats.total++;
@@ -50,13 +50,14 @@ function createPrismaClient(): PrismaClient {
         );
       }
     };
-    
+
     console.info("[TURSO_HTTP] Monitor ativado");
-    
+
     const adapter = new PrismaLibSQL({
       url,
       authToken,
       fetch: monitoredFetch,
+      concurrency: 1,
     });
     const client = new TursoPrismaClient({
       adapter,
