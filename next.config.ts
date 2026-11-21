@@ -10,6 +10,27 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  turbopack: { root: process.cwd() },
+  serverExternalPackages: [
+    "@prisma/client",
+    "@prisma/adapter-libsql",
+    "@libsql/client",
+  ],
+  outputFileTracingExcludes: {
+    "/*": [
+      "./.env",
+      "./README.md",
+      "./MIGRACAO_FRONTEND.md",
+      "./node_modules/.prisma/client/query_engine-windows.dll.node",
+      "./public/**/*",
+      "./teste-*.cjs",
+"./auditoria-migracao.cjs",
+"./diagnostico-*.cjs",
+"./migrar-aiven-para-turso.cjs",
+"./verificar-migracao.ps1",
+      "./turso_schema.sql",
+    ],
+  },
   async headers() {
     return [{ source: "/(.*)", headers: securityHeaders }];
   },
