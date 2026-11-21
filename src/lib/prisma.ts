@@ -4,6 +4,11 @@ import { PrismaLibSQL } from "@prisma/adapter-libsql";
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
+  tursoHttp?: {
+    active: number;
+    peak: number;
+    total: number;
+  };
 };
 
 function createPrismaClient(): PrismaClient {
@@ -20,7 +25,39 @@ function createPrismaClient(): PrismaClient {
       );
     }
 
-    const adapter = new PrismaLibSQL({ url, authToken });
+    const stats = globalForPrisma.tursoHttp ??= {
+      active: 0,
+      peak: 0,
+      total: 0,
+    };
+    
+    const monitoredFetch: typeof fetch = async (input, init) => {
+      stats.active++;
+      stats.total++;
+      stats.peak = Math.max(stats.peak, stats.active);
+    
+      console.info(
+        `[TURSO_HTTP] início | simultâneas=${stats.active} | pico=${stats.peak} | total=${stats.total}`
+      );
+    
+      try {
+        return await fetch(input, init);
+      } finally {
+        stats.active--;
+      
+        console.info(
+          `[TURSO_HTTP] fim | simultâneas=${stats.active} | pico=${stats.peak}`
+        );
+      }
+    };
+    
+    console.info("[TURSO_HTTP] Monitor ativado");
+    
+    const adapter = new PrismaLibSQL({
+      url,
+      authToken,
+      fetch: monitoredFetch,
+    });
     const client = new TursoPrismaClient({
       adapter,
       log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
