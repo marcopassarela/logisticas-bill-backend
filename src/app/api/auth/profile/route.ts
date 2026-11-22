@@ -2,11 +2,34 @@ import { publishAuthInvalidated } from "@/lib/realtime";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser, verifyAdminPassword, verifyPassword, hashPassword } from "@/lib/auth";
+import { getCurrentIdentity, getCurrentUser, verifyAdminPassword, verifyPassword, hashPassword } from "@/lib/auth";
 
 export async function GET() {
-  const sessionUser = await getCurrentUser();
-  if (!sessionUser) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  const identity = await getCurrentIdentity();
+
+  if (!identity) {
+    return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  }
+
+  if (identity.type === "VISITOR") {
+    return NextResponse.json({
+      id: identity.visitor.id,
+      username: null,
+      name: identity.visitor.name,
+      role: "VISITOR",
+      cargoUsuario: null,
+      funcionarioId: null,
+      theme: null,
+      isActive: true,
+      permissions: identity.visitor.permissions,
+      lastSeenAt: null,
+      lastLoginAt: null,
+      lastLogoutAt: null,
+      expiresAt: identity.visitor.expiresAt,
+    });
+  }
+
+  const sessionUser = identity.user;
 
   return NextResponse.json({
     id: sessionUser.id,
@@ -23,7 +46,6 @@ export async function GET() {
     lastLogoutAt: sessionUser.lastLogoutAt,
   });
 }
-
 const profileSchema = z.object({
   action: z.literal("profile"),
   username: z.string().trim().min(3).max(50),
@@ -99,7 +121,7 @@ export async function PATCH(req: NextRequest) {
           where: { id: sessionUser.id },
           data: { passwordHash: await hashPassword(data.newPassword) },
         }),
-        prisma.session.deleteMany({}),
+        prisma.session.deleteMany({ where: { userId: sessionUser.id } }),
       ]);
       await publishAuthInvalidated();
 

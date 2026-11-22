@@ -32,18 +32,26 @@ model User {
   manutencoesCriadas  ManutencaoProgramada[]    @relation("ManutencaoCreatedBy")
   pushSubscriptions   PushSubscription[]
   sessions            Session[]
+  deviceAuthorizations DeviceAuthorization[]
+  activationKeys ActivationKey[] @relation("ActivationKeyTargetUser")
   funcionario         Funcionario?              @relation("FuncionarioUsuario", fields: [funcionarioId], references: [id])
 }
 
 model Session {
-  id        String   @id @default(cuid())
-  userId    String
-  token     String   @unique
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                    String               @id @default(cuid())
+  userId                String?
+  visitorAccessId       String?
+  deviceAuthorizationId String?
+  token                 String               @unique
+  expiresAt             DateTime
+  createdAt             DateTime             @default(now())
+  user                  User?                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  visitorAccess         VisitorAccess?       @relation(fields: [visitorAccessId], references: [id], onDelete: Cascade)
+  deviceAuthorization   DeviceAuthorization? @relation(fields: [deviceAuthorizationId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([visitorAccessId])
+  @@index([deviceAuthorizationId])
   @@index([token])
 }
 
@@ -341,6 +349,84 @@ model PushSubscription {
   @@index([userId])
 }
 
+model VisitorAccess {
+  id             String                @id @default(cuid())
+  name           String                @default("Visitante")
+  permissions    Json?
+  expiresAt      DateTime?
+  revokedAt      DateTime?
+  createdAt      DateTime              @default(now())
+  lastSeenAt     DateTime?
+  activationKeys ActivationKey[]
+  devices        DeviceAuthorization[]
+  sessions       Session[]
+
+  @@index([expiresAt])
+  @@index([revokedAt])
+}
+
+model ActivationKey {
+  id                    String               @id @default(cuid())
+  codeHash              String               @unique
+  targetUserId          String?
+  visitorAccessId       String?
+  deviceAuthorizationId String?              @unique
+  expiresAt             DateTime?
+  usedAt                DateTime?
+  createdAt             DateTime             @default(now())
+  createdByUserId       String?
+  closedAt             DateTime?
+  closedReason         String?
+  targetUser            User?                @relation("ActivationKeyTargetUser", fields: [targetUserId], references: [id], onDelete: Cascade)
+  visitorAccess         VisitorAccess?       @relation(fields: [visitorAccessId], references: [id], onDelete: Cascade)
+  deviceAuthorization   DeviceAuthorization? @relation(fields: [deviceAuthorizationId], references: [id], onDelete: SetNull)
+
+  @@index([targetUserId])
+  @@index([visitorAccessId])
+  @@index([expiresAt])
+}
+
+model DeviceAuthorization {
+  id              String         @id @default(cuid())
+  userId          String?
+  visitorAccessId String?
+  publicKey       String         @unique
+  createdAt       DateTime       @default(now())
+  lastSeenAt      DateTime?
+  revokedAt       DateTime?
+  user            User?          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  visitorAccess   VisitorAccess? @relation(fields: [visitorAccessId], references: [id], onDelete: Cascade)
+  activationKey   ActivationKey?
+  sessions        Session[]
+
+  @@index([userId])
+  @@index([visitorAccessId])
+  @@index([revokedAt])
+}
+
+model DeviceChallenge {
+  id            String   @id @default(cuid())
+  challengeHash String   @unique
+  publicKey     String
+  purpose       String
+  expiresAt     DateTime
+  usedAt        DateTime?
+  createdAt     DateTime @default(now())
+
+  @@index([publicKey])
+  @@index([expiresAt])
+  @@index([purpose])
+}
+
+model ActivationRateLimit {
+  ipHash          String @id
+  attempts        Int    @default(0)
+  windowStartedAt Int
+  blockedUntil    Int?
+  updatedAt       Int
+
+  @@index([blockedUntil])
+}
 enum Role {
   ADMIN
   USER

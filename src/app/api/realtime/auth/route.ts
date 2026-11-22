@@ -1,14 +1,14 @@
-import { NextResponse } from "next/server";
+﻿import { NextResponse } from "next/server";
 import { createHttpClient } from "@ably/pubsub-server";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentIdentity } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
 export async function GET() {
   try {
-    const user = await getCurrentUser();
+    const identity = await getCurrentIdentity();
 
-    if (!user) {
+    if (!identity) {
       return NextResponse.json(
         { error: "Não autorizado" },
         { status: 401 }
@@ -25,10 +25,15 @@ export async function GET() {
       );
     }
 
+    const clientId =
+      identity.type === "VISITOR"
+        ? identity.visitor.id
+        : identity.user.id;
+
     const ably = createHttpClient({ key: apiKey });
 
     const tokenRequest = await ably.auth.createTokenRequest({
-      clientId: user.id,
+      clientId,
       capability: {
         "logistica-global": ["subscribe", "presence"],
       },

@@ -1,9 +1,11 @@
-import { createHttpClient } from "@ably/pubsub-server";
+import { createHttpClient, createRealtimeClient } from "@ably/pubsub-server";
 
 type AblyHttpClient = ReturnType<typeof createHttpClient>;
+type AblyRealtimeClient = ReturnType<typeof createRealtimeClient>;
 
 const globalForAbly = globalThis as typeof globalThis & {
   __logisticaAbly?: AblyHttpClient;
+  __logisticaAblyRealtime?: AblyRealtimeClient;
 };
 
 function getAblyClient(): AblyHttpClient | null {
@@ -45,6 +47,40 @@ export function publishAuthInvalidated() {
   });
 }
 
+function getAblyRealtimeClient(): AblyRealtimeClient | null {
+  const apiKey = process.env.ABLY_API_KEY;
+
+  if (!apiKey) return null;
+
+  if (!globalForAbly.__logisticaAblyRealtime) {
+    globalForAbly.__logisticaAblyRealtime = createRealtimeClient({
+      key: apiKey,
+      clientId: "*",
+    });
+  }
+
+  return globalForAbly.__logisticaAblyRealtime;
+}
+
+export async function removeOnlineUserPresence(clientId: string): Promise<boolean> {
+  if (!clientId) return false;
+
+  try {
+    const ably = getAblyRealtimeClient();
+    if (!ably) return false;
+
+    await ably.connection.whenState("connected");
+
+    const channel = ably.channels.get("logistica-global");
+    await channel.attach();
+    await channel.presence.leaveClient(clientId);
+
+    return true;
+  } catch (error) {
+    console.error("Falha ao remover presenca no Ably:", error);
+    return false;
+  }
+}
 export async function getOnlineUserIds(): Promise<Set<string> | null> {
   try {
     const ably = getAblyClient();
