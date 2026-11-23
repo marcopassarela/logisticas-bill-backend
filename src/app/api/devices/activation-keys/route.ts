@@ -186,6 +186,10 @@ export async function POST(req: NextRequest) {
         const visitor = await tx.visitorAccess.create({
           data: {
             name: "Visitante",
+            permissions: {
+              dashboard: true,
+              "dashboard.visualizar": true,
+            },
             expiresAt,
           },
           select: { id: true },
