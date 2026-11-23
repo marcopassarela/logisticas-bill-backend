@@ -3,6 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import {
+  publishAuthInvalidatedForClient,
+  publishDataChanged,
+} from "@/lib/realtime";
 
 export const runtime = "nodejs";
 
@@ -281,6 +285,9 @@ export async function PATCH(req: NextRequest) {
         where: { id: keyId },
         select: {
           id: true,
+          targetUserId: true,
+          visitorAccessId: true,
+          deviceAuthorizationId: true,
           closedReason: true,
           visitorAccess: {
             select: { revokedAt: true },
@@ -292,83 +299,70 @@ export async function PATCH(req: NextRequest) {
         return { ok: false as const, reason: "NOT_FOUND" as const };
       }
 
-      if (
+      const alreadyRevoked =
         existing.closedReason === "REVOKED" ||
-        existing.visitorAccess?.revokedAt
-      ) {
-        return { ok: true as const };
-      }
+        Boolean(existing.visitorAccess?.revokedAt);
 
-
-      const claimed = await tx.activationKey.updateMany({
-        where: {
-          id: keyId,
-          OR: [
-            { closedReason: "EXPIRED" },
-            { closedAt: null },
-          ],
-        },
-        data: {
-          closedAt: now,
-          closedReason: "REVOKED",
-        },
-      });
-
-      if (claimed.count !== 1) {
-        const current = await tx.activationKey.findUnique({
-          where: { id: keyId },
-          select: {
-            closedReason: true,
-            usedAt: true,
-            expiresAt: true,
-            visitorAccess: {
-              select: { revokedAt: true },
-            },
+      if (!alreadyRevoked) {
+        const claimed = await tx.activationKey.updateMany({
+          where: {
+            id: keyId,
+            OR: [
+              { closedReason: "EXPIRED" },
+              { closedAt: null },
+            ],
+          },
+          data: {
+            closedAt: now,
+            closedReason: "REVOKED",
           },
         });
 
-        if (!current) {
-          return { ok: false as const, reason: "NOT_FOUND" as const };
+        if (claimed.count !== 1) {
+          const current = await tx.activationKey.findUnique({
+            where: { id: keyId },
+            select: {
+              closedReason: true,
+              visitorAccess: {
+                select: { revokedAt: true },
+              },
+            },
+          });
+
+          if (!current) {
+            return { ok: false as const, reason: "NOT_FOUND" as const };
+          }
+
+          const revoked =
+            current.closedReason === "REVOKED" ||
+            Boolean(current.visitorAccess?.revokedAt);
+
+          if (!revoked) {
+            return { ok: false as const, reason: "CONFLICT" as const };
+          }
         }
-
-        if (
-          current.closedReason === "REVOKED" ||
-          current.visitorAccess?.revokedAt
-        ) {
-          return { ok: true as const };
-        }
-
-
-        return { ok: false as const, reason: "CONFLICT" as const };
       }
 
-      const key = await tx.activationKey.findUnique({
-        where: { id: keyId },
-        select: {
-          targetUserId: true,
-          visitorAccessId: true,
-          deviceAuthorizationId: true,
-        },
-      });
-
-      if (!key) {
-        throw new Error("ACTIVATION_KEY_NOT_FOUND_AFTER_CLAIM");
-      }
-
-      if (key.targetUserId && key.deviceAuthorizationId) {
+      if (existing.targetUserId && existing.deviceAuthorizationId) {
         await tx.deviceAuthorization.updateMany({
           where: {
-            id: key.deviceAuthorizationId,
+            id: existing.deviceAuthorizationId,
             revokedAt: null,
           },
           data: { revokedAt: now },
         });
+
+        await tx.session.deleteMany({
+          where: {
+            deviceAuthorizationId: existing.deviceAuthorizationId,
+          },
+        });
       }
 
-      if (key.visitorAccessId) {
+      if (existing.visitorAccessId) {
         await tx.visitorAccess.updateMany({
           where: {
-            id: key.visitorAccessId,
+            id: existing.visitorAccessId,
             revokedAt: null,
           },
           data: { revokedAt: now },
@@ -376,14 +370,23 @@ export async function PATCH(req: NextRequest) {
 
         await tx.deviceAuthorization.updateMany({
           where: {
-            visitorAccessId: key.visitorAccessId,
+            visitorAccessId: existing.visitorAccessId,
             revokedAt: null,
           },
           data: { revokedAt: now },
         });
+
+        await tx.session.deleteMany({
+          where: {
+            visitorAccessId: existing.visitorAccessId,
+          },
+        });
       }
 
-      return { ok: true as const };
+      const clientId = existing.visitorAccessId ??
+        (existing.deviceAuthorizationId ? existing.targetUserId : null);
+
+      return { ok: true as const, clientId };
     });
 
     if (!result.ok) {
@@ -399,6 +402,12 @@ export async function PATCH(req: NextRequest) {
         { status: 404 }
       );
     }
+
+    if (result.clientId) {
+      await publishAuthInvalidatedForClient(result.clientId);
+    }
+
+    await publishDataChanged("usuarios");
 
     return NextResponse.json({
       ok: true,

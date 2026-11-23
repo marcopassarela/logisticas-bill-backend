@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { publishDataChanged } from "@/lib/realtime";
 import {
   createVisitorSessionRecord,
   setVisitorSessionCookie,
@@ -256,6 +257,7 @@ export async function POST(req: NextRequest) {
 
     // Uma ativação concluída limpa o histórico de falhas daquele IP.
     await clearActivationFailures(req);
+    await publishDataChanged("usuarios");
 
     if (result.type === "VISITOR") {
       await setVisitorSessionCookie(

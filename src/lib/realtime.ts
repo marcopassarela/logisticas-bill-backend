@@ -47,6 +47,15 @@ export function publishAuthInvalidated() {
   });
 }
 
+export function publishAuthInvalidatedForClient(clientId: string) {
+  if (!clientId) return Promise.resolve();
+
+  return publish("auth:invalidate", {
+    clientId,
+    reason: "access_revoked",
+  });
+}
+
 function getAblyRealtimeClient(): AblyRealtimeClient | null {
   const apiKey = process.env.ABLY_API_KEY;
 
