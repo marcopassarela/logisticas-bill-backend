@@ -3,7 +3,7 @@ services:
     name: logisticas-bill-backend
     runtime: node
     plan: starter
-    buildCommand: npm ci && npx prisma generate && npm run build
+    buildCommand: npm ci --include=dev && npx prisma generate && npm run build
     startCommand: npm start
     healthCheckPath: /api/health
     autoDeploy: true
