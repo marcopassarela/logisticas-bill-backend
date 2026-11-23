@@ -19,6 +19,19 @@ Backend Next.js separado para o Logísticas Bill. A aplicação contém as regra
 4. Use `/api/health` como health check.
 5. Execute migrações em um job controlado com `npx prisma migrate deploy` quando houver diretório `prisma/migrations`.
 
+## Execução local no Windows/PowerShell
+
+Antes de executar as migrações, crie um arquivo `.env` na raiz do backend e informe uma `DATABASE_URL` válida do Aiven:
+
+```powershell
+Copy-Item .env.example .env
+notepad .env
+npx.cmd prisma migrate deploy
+npm.cmd start
+```
+
+O script `start` usa automaticamente a variável `PORT` definida pelo Render e a porta padrão do Next.js localmente. Não é necessário utilizar sintaxe Bash como `${PORT:-10000}` no PowerShell.
+
 ## Frontend
 
 Configure na Vercel:

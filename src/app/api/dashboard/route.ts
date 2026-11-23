@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getCurrentIdentity } from "@/lib/auth";
-import { canAccess } from "@/lib/permissions";
+import { getCurrentUser } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -37,37 +36,11 @@ function numberOf(value: unknown) {
 }
 
 export async function GET() {
-  const identity = await getCurrentIdentity();
+  const user = await getCurrentUser();
 
-  if (!identity) {
+  if (!user) {
     return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   }
-
-  if (identity.type === "VISITOR") {
-    if (!canAccess("VISITOR", identity.visitor.permissions, "dashboard.visualizar")) {
-      return NextResponse.json({ error: "Sem permissão para acessar o Dashboard." }, { status: 403 });
-    }
-
-    return NextResponse.json({
-      generatedAt: new Date().toISOString(),
-      stats: {
-        caminhoesAtivos: 0,
-        pesoHojeToneladas: 0,
-        carregamentosHoje: 0,
-        alertas: 0,
-        carregamentosOntem: 0,
-        pesoOntemToneladas: 0,
-      },
-      statusCaminhoes: [],
-      pesoSemanal: [],
-      recentes: [],
-      alertas: [],
-    }, {
-      headers: { "Cache-Control": "no-store, max-age=0" },
-    });
-  }
-
-  const user = identity.user;
 
   try {
     const today = dateKey(new Date());

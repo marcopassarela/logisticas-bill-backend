@@ -1,40 +1,15 @@
-import { publishAuthInvalidatedForClient } from "@/lib/realtime";
+import { publishAuthInvalidated } from "@/lib/realtime";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { getCurrentIdentity, getCurrentUser, verifyAdminPassword, verifyPassword, hashPassword } from "@/lib/auth";
+import { getCurrentUser, verifyAdminPassword, verifyPassword, hashPassword } from "@/lib/auth";
 
 export async function GET() {
-  const identity = await getCurrentIdentity();
-
-  if (!identity) {
-    return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
-  }
-
-  if (identity.type === "VISITOR") {
-    return NextResponse.json({
-      id: identity.visitor.id,
-      sessionId: identity.sessionId,
-      username: null,
-      name: identity.visitor.name,
-      role: "VISITOR",
-      cargoUsuario: null,
-      funcionarioId: null,
-      theme: null,
-      isActive: true,
-      permissions: identity.visitor.permissions,
-      lastSeenAt: null,
-      lastLoginAt: null,
-      lastLogoutAt: null,
-      expiresAt: identity.visitor.expiresAt,
-    });
-  }
-
-  const sessionUser = identity.user;
+  const sessionUser = await getCurrentUser();
+  if (!sessionUser) return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
 
   return NextResponse.json({
     id: sessionUser.id,
-    sessionId: identity.sessionId,
     username: sessionUser.username,
     name: sessionUser.name,
     role: sessionUser.role,
@@ -48,6 +23,7 @@ export async function GET() {
     lastLogoutAt: sessionUser.lastLogoutAt,
   });
 }
+
 const profileSchema = z.object({
   action: z.literal("profile"),
   username: z.string().trim().min(3).max(50),
@@ -118,29 +94,14 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ error: "A senha atual está incorreta." }, { status: 403 });
       }
 
-      const newPasswordHash = await hashPassword(data.newPassword);
-
-      const sessionIds = await prisma.$transaction(async (tx) => {
-        const sessions = await tx.session.findMany({
-          where: { userId: sessionUser.id },
-          select: { token: true },
-        });
-
-        await tx.user.update({
+      await prisma.$transaction([
+        prisma.user.update({
           where: { id: sessionUser.id },
-          data: { passwordHash: newPasswordHash },
-        });
-
-        await tx.session.deleteMany({
-          where: { userId: sessionUser.id },
-        });
-
-        return sessions.map((session) => session.token);
-      });
-
-      for (const sessionId of sessionIds) {
-        await publishAuthInvalidatedForClient(sessionId);
-      }
+          data: { passwordHash: await hashPassword(data.newPassword) },
+        }),
+        prisma.session.deleteMany({}),
+      ]);
+      await publishAuthInvalidated();
 
       return NextResponse.json({ ok: true, sessionsInvalidated: true });
     }

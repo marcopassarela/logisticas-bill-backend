@@ -3,9 +3,6 @@ import { z } from "zod";
 export const loginSchema = z.object({
   username: z.string().min(3, "Usuário deve ter no mínimo 3 caracteres"),
   password: z.string().min(4, "Senha deve ter no mínimo 4 caracteres"),
-  publicKey: z.string().min(100).max(512).optional(),
-  challenge: z.string().min(20).max(128).optional(),
-  signature: z.string().min(80).max(128).optional(),
 });
 
 export const funcionarioSchema = z.object({

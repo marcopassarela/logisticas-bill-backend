@@ -9,127 +9,145 @@ datasource db {
 }
 
 model User {
-  id                  String                    @id @default(cuid())
-  username            String                    @unique
-  passwordHash        String
-  name                String
-  role                Role                      @default(USER)
-  isActive            Boolean                   @default(true)
-  theme               String                    @default("system")
-  createdAt           DateTime                  @default(now())
-  updatedAt           DateTime                  @updatedAt
-  permissions         Json?
-  lastSeenAt          DateTime?
-  lastLoginAt         DateTime?
-  lastLogoutAt        DateTime?
-  cargoUsuario        String?
-  funcionarioId       String?                   @unique
-  agendamentosCriados AgendamentoCarregamento[] @relation("AgendamentoCreatedBy")
-  auditLogs           AuditLog[]
+  id            String       @id @default(cuid())
+  username      String       @unique
+  passwordHash  String
+  name          String
+  role          Role         @default(USER)
+  cargoUsuario  String?
+  funcionarioId String?      @unique
+  funcionario   Funcionario? @relation("FuncionarioUsuario", fields: [funcionarioId], references: [id], onDelete: SetNull)
+  isActive      Boolean      @default(true)
+  theme         String       @default("system") // light | dark | system
+  permissions   Json?
+  lastSeenAt    DateTime?
+  lastLoginAt   DateTime?
+  lastLogoutAt  DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  sessions            Session[]
   diarias             Diaria[]                  @relation("DiariaCreatedBy")
   faltas              Falta[]                   @relation("FaltaCreatedBy")
-  lembretes           Lembrete[]
+  agendamentosCriados AgendamentoCarregamento[] @relation("AgendamentoCreatedBy")
   manutencoesCriadas  ManutencaoProgramada[]    @relation("ManutencaoCreatedBy")
+  lembretes           Lembrete[]
   pushSubscriptions   PushSubscription[]
-  sessions            Session[]
-  deviceAuthorizations DeviceAuthorization[]
-  activationKeys ActivationKey[] @relation("ActivationKeyTargetUser")
-  funcionario         Funcionario?              @relation("FuncionarioUsuario", fields: [funcionarioId], references: [id])
+  auditLogs           AuditLog[]
+}
+
+enum Role {
+  ADMIN
+  USER
+  MANAGER
 }
 
 model Session {
-  id                    String               @id @default(cuid())
-  userId                String?
-  visitorAccessId       String?
-  deviceAuthorizationId String?
-  token                 String               @unique
-  expiresAt             DateTime
-  createdAt             DateTime             @default(now())
-  user                  User?                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  visitorAccess         VisitorAccess?       @relation(fields: [visitorAccessId], references: [id], onDelete: Cascade)
-  deviceAuthorization   DeviceAuthorization? @relation(fields: [deviceAuthorizationId], references: [id], onDelete: Cascade)
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
-  @@index([visitorAccessId])
-  @@index([deviceAuthorizationId])
   @@index([token])
 }
 
 model Funcionario {
-  id                         String            @id @default(cuid())
-  nome                       String
-  cpf                        String?           @unique
-  telefone                   String?
-  email                      String?
-  cargoId                    String?
-  dataAdmissao               DateTime?
-  salario                    Decimal?          @db.Decimal(12, 2)
-  status                     StatusFuncionario @default(ATIVO)
-  observacoes                String?
-  createdAt                  DateTime          @default(now())
-  updatedAt                  DateTime          @updatedAt
-  carregamentosComoAjudante  Carregamento[]    @relation("CarregamentoAjudante")
-  carregamentosComoMotorista Carregamento[]    @relation("CarregamentoMotorista")
-  diarias                    Diaria[]
-  faltas                     Falta[]
-  cargo                      Cargo?            @relation(fields: [cargoId], references: [id])
-  usuario                    User?             @relation("FuncionarioUsuario")
+  id           String            @id @default(cuid())
+  nome         String
+  cpf          String?           @unique
+  telefone     String?
+  email        String?
+  cargoId      String?
+  cargo        Cargo?            @relation(fields: [cargoId], references: [id])
+  dataAdmissao DateTime?
+  salario      Decimal?          @db.Decimal(12, 2)
+  status       StatusFuncionario @default(ATIVO)
+  observacoes  String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  diarias Diaria[]
+  faltas  Falta[]
+
+  carregamentosComoMotorista Carregamento[] @relation("CarregamentoMotorista")
+  carregamentosComoAjudante  Carregamento[] @relation("CarregamentoAjudante")
+  usuario                    User?          @relation("FuncionarioUsuario")
 
   @@index([nome])
   @@index([status])
 }
 
+enum StatusFuncionario {
+  ATIVO
+  INATIVO
+  AFASTADO
+}
+
 model Cargo {
-  id           String        @id @default(cuid())
-  nome         String        @unique
-  descricao    String?
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id        String   @id @default(cuid())
+  nome      String   @unique
+  descricao String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   funcionarios Funcionario[]
 }
 
 model Caminhao {
-  id            String                    @id @default(cuid())
-  placa         String                    @unique
+  id            String         @id @default(cuid())
+  placa         String         @unique
   modelo        String?
   marca         String?
   ano           Int?
-  capacidadeKg  Decimal?                  @db.Decimal(12, 2)
-  tipo          String?
-  status        StatusCaminhao            @default(LIBERADO)
+  capacidadeKg  Decimal?       @db.Decimal(12, 2)
+  tipo          String? // truck, carreta, bitrem etc
+  status        StatusCaminhao @default(LIBERADO)
   quilometragem Int?
   renavam       String?
   chassi        String?
   observacoes   String?
-  createdAt     DateTime                  @default(now())
-  updatedAt     DateTime                  @updatedAt
-  agendamentos  AgendamentoCarregamento[]
-  carregamentos Carregamento[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
   diarias       Diaria[]
-  manutencoes   ManutencaoProgramada[]
   rotas         Rota[]
+  carregamentos Carregamento[]
+  agendamentos  AgendamentoCarregamento[]
+  manutencoes   ManutencaoProgramada[]
 
   @@index([placa])
   @@index([status])
 }
 
+enum StatusCaminhao {
+  LIBERADO
+  CARREGANDO
+  CARREGADO
+  EM_ROTA
+  MANUTENCAO
+}
+
 model Carregamento {
   id          String             @id @default(cuid())
   caminhaoId  String
+  caminhao    Caminhao           @relation(fields: [caminhaoId], references: [id])
+  motoristaId String?
+  motorista   Funcionario?       @relation("CarregamentoMotorista", fields: [motoristaId], references: [id])
+  ajudanteId  String?
+  ajudante    Funcionario?       @relation("CarregamentoAjudante", fields: [ajudanteId], references: [id])
   data        DateTime           @default(now())
+  origem      String?
+  destino     String?
   pesoTotal   Decimal            @db.Decimal(14, 3)
   status      StatusCarregamento @default(EM_ANDAMENTO)
   observacoes String?
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
-  destino     String?
-  origem      String?
-  ajudanteId  String?
-  motoristaId String?
-  ajudante    Funcionario?       @relation("CarregamentoAjudante", fields: [ajudanteId], references: [id])
-  caminhao    Caminhao           @relation(fields: [caminhaoId], references: [id])
-  motorista   Funcionario?       @relation("CarregamentoMotorista", fields: [motoristaId], references: [id])
-  itens       CarregamentoItem[]
+
+  itens CarregamentoItem[]
 
   @@index([data])
   @@index([status])
@@ -138,13 +156,22 @@ model Carregamento {
   @@index([ajudanteId])
 }
 
+enum StatusCarregamento {
+  EM_ANDAMENTO
+  FINALIZADO
+  EM_ROTA
+  CANCELADO
+  NAO_CARREGADO
+}
+
 model CarregamentoItem {
   id                   String                 @id @default(cuid())
   carregamentoId       String
+  carregamento         Carregamento           @relation(fields: [carregamentoId], references: [id], onDelete: Cascade)
   quantidade           Decimal                @db.Decimal(14, 3)
   peso                 Decimal                @db.Decimal(14, 3)
-  observacao           String?
   statusItem           StatusItemCarregamento @default(PENDENTE)
+  observacao           String?
   ordem                Int                    @default(0)
   descricaoLivre       String?
   ordemServico         String?
@@ -153,31 +180,35 @@ model CarregamentoItem {
   clienteCidade        String?
   clienteBairro        String?
   mapaUrl              String?
-  notaFiscalNome       String?
-  notaFiscalData       Bytes?
-  notaFiscalPath       String?
-  pdfExiste            Boolean                @default(false)
-  notaFiscalDisponivel Boolean                @default(false)
   mapaUrl2             String?
-  carregamento         Carregamento           @relation(fields: [carregamentoId], references: [id], onDelete: Cascade)
+  notaFiscalNome       String?
+  notaFiscalData       Bytes?                 @db.ByteA // legado: será esvaziado após migração para o Blob
+  notaFiscalPath       String?
+  notaFiscalDisponivel Boolean                @default(false)
 
+  @@index([carregamentoId, ordem])
   @@index([carregamentoId, notaFiscalDisponivel])
-  @@index([carregamentoId])
+}
+
+enum StatusItemCarregamento {
+  PENDENTE
+  CARREGADO
+  NAO_CARREGADO
 }
 
 model Diaria {
   id            String      @id @default(cuid())
   funcionarioId String
+  funcionario   Funcionario @relation(fields: [funcionarioId], references: [id])
   caminhaoId    String?
+  caminhao      Caminhao?   @relation(fields: [caminhaoId], references: [id])
   data          DateTime
   valor         Decimal     @db.Decimal(12, 2)
   observacao    String?
   createdById   String
+  createdBy     User        @relation("DiariaCreatedBy", fields: [createdById], references: [id])
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
-  caminhao      Caminhao?   @relation(fields: [caminhaoId], references: [id])
-  createdBy     User        @relation("DiariaCreatedBy", fields: [createdById], references: [id])
-  funcionario   Funcionario @relation(fields: [funcionarioId], references: [id])
 
   @@index([data])
   @@index([funcionarioId])
@@ -186,22 +217,30 @@ model Diaria {
 model Falta {
   id            String      @id @default(cuid())
   funcionarioId String
+  funcionario   Funcionario @relation(fields: [funcionarioId], references: [id])
   data          DateTime
   tipo          TipoFalta
   justificativa String?
-  atestadoUrl   String?
+  atestadoUrl   String? // path or URL do arquivo
   createdById   String
+  createdBy     User        @relation("FaltaCreatedBy", fields: [createdById], references: [id])
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
-  createdBy     User        @relation("FaltaCreatedBy", fields: [createdById], references: [id])
-  funcionario   Funcionario @relation(fields: [funcionarioId], references: [id])
 
   @@index([data])
   @@index([funcionarioId])
 }
 
+enum TipoFalta {
+  FALTA
+  ATESTADO
+  FOLGA
+  LICENCA
+  OUTRO
+}
+
 model Rota {
-  id             String      @id @default(cuid())
+  id             String     @id @default(cuid())
   nome           String
   origem         String
   destino        String
@@ -211,43 +250,57 @@ model Rota {
   destinoLng     Float?
   distanciaKm    Float?
   caminhaoId     String?
-  status         StatusRota  @default(PLANEJADA)
-  observacoes    String?
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  caminhao       Caminhao?  @relation(fields: [caminhaoId], references: [id])
+  status         StatusRota @default(PLANEJADA)
   dataProgramada String?
-  caminhao       Caminhao?   @relation(fields: [caminhaoId], references: [id])
-  pontos         RotaPonto[]
+  observacoes    String?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  pontos RotaPonto[]
 
   @@index([status])
   @@index([dataProgramada])
 }
 
+enum StatusRota {
+  PLANEJADA
+  EM_ANDAMENTO
+  CONCLUIDA
+  CANCELADA
+}
+
 model RotaPonto {
   id        String  @id @default(cuid())
   rotaId    String
+  rota      Rota    @relation(fields: [rotaId], references: [id], onDelete: Cascade)
   ordem     Int
   nome      String?
   lat       Float
   lng       Float
   endereco  String?
   concluido Boolean @default(false)
-  rota      Rota    @relation(fields: [rotaId], references: [id], onDelete: Cascade)
 }
 
 model Alerta {
   id         String     @id @default(cuid())
-  tipo       String
+  tipo       String // PESO, CAMINHAO, SISTEMA
   titulo     String
   mensagem   String
   severidade Severidade @default(INFO)
   lido       Boolean    @default(false)
-  referencia String?
+  referencia String? // id relacionado
   createdAt  DateTime   @default(now())
 
   @@index([lido])
   @@index([createdAt])
   @@index([tipo, referencia])
+}
+
+enum Severidade {
+  INFO
+  WARNING
+  CRITICAL
 }
 
 model AuditLog {
@@ -259,7 +312,7 @@ model AuditLog {
   details   Json?
   ip        String?
   createdAt DateTime @default(now())
-  user      User?    @relation(fields: [userId], references: [id])
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([createdAt])
   @@index([entity])
@@ -269,223 +322,45 @@ model AuditLog {
 model EnderecoFavorito {
   id        String   @id @default(cuid())
   nome      String
+  pasta     String   @default("Favoritos")
   query     String
   endereco  String
   lat       Float
   lng       Float
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  pasta     String   @default("Favoritos")
 
   @@index([createdAt])
 }
 
-model AgendamentoCarregamento {
-  id             String                        @id @default(cuid())
-  userId         String
-  caminhaoId     String
-  peso           Decimal                       @db.Decimal(14, 3)
-  dataHora       DateTime
-  origem         String
-  destino        String
-  status         StatusAgendamentoCarregamento @default(AGENDADO)
-  createdAt      DateTime                      @default(now())
-  updatedAt      DateTime                      @updatedAt
-  alertaGeradoEm DateTime?
-  caminhao       Caminhao                      @relation(fields: [caminhaoId], references: [id])
-  user           User                          @relation("AgendamentoCreatedBy", fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([status, dataHora])
-  @@index([caminhaoId])
-  @@index([userId])
-}
-
-model ManutencaoProgramada {
-  id                String                     @id @default(cuid())
-  userId            String
-  caminhaoId        String
-  descricao         String
-  dataHora          DateTime?
-  quilometragemAlvo Int?
-  status            StatusManutencaoProgramada @default(ATIVA)
-  createdAt         DateTime                   @default(now())
-  updatedAt         DateTime                   @updatedAt
-  alertaGeradoEm    DateTime?
-  caminhao          Caminhao                   @relation(fields: [caminhaoId], references: [id])
-  user              User                       @relation("ManutencaoCreatedBy", fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([status, dataHora])
-  @@index([caminhaoId, quilometragemAlvo])
-  @@index([userId])
-}
-
-model Lembrete {
-  id            String         @id @default(cuid())
-  userId        String
-  descricao     String         @db.VarChar(500)
-  dataHora      DateTime
-  status        StatusLembrete @default(PENDENTE)
-  enviadoEm     DateTime?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  processandoEm DateTime?
-  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, status, dataHora])
-  @@index([status, dataHora])
-}
-
-model PushSubscription {
-  id        String   @id @default(cuid())
-  userId    String
-  endpoint  String   @unique
-  p256dh    String
-  auth      String
-  userAgent String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-}
-
-model VisitorAccess {
-  id             String                @id @default(cuid())
-  name           String                @default("Visitante")
-  permissions    Json?
-  expiresAt      DateTime?
-  revokedAt      DateTime?
-  createdAt      DateTime              @default(now())
-  lastSeenAt     DateTime?
-  activationKeys ActivationKey[]
-  devices        DeviceAuthorization[]
-  sessions       Session[]
-
-  @@index([expiresAt])
-  @@index([revokedAt])
-}
-
-model ActivationKey {
-  id                    String               @id @default(cuid())
-  codeHash              String               @unique
-  targetUserId          String?
-  visitorAccessId       String?
-  deviceAuthorizationId String?              @unique
-  expiresAt             DateTime?
-  usedAt                DateTime?
-  createdAt             DateTime             @default(now())
-  createdByUserId       String?
-  closedAt             DateTime?
-  closedReason         String?
-  targetUser            User?                @relation("ActivationKeyTargetUser", fields: [targetUserId], references: [id], onDelete: Cascade)
-  visitorAccess         VisitorAccess?       @relation(fields: [visitorAccessId], references: [id], onDelete: Cascade)
-  deviceAuthorization   DeviceAuthorization? @relation(fields: [deviceAuthorizationId], references: [id], onDelete: SetNull)
-
-  @@index([targetUserId])
-  @@index([visitorAccessId])
-  @@index([expiresAt])
-}
-
-model DeviceAuthorization {
-  id              String         @id @default(cuid())
-  userId          String?
-  visitorAccessId String?
-  publicKey       String         @unique
-  createdAt       DateTime       @default(now())
-  lastSeenAt      DateTime?
-  revokedAt       DateTime?
-  user            User?          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  visitorAccess   VisitorAccess? @relation(fields: [visitorAccessId], references: [id], onDelete: Cascade)
-  activationKey   ActivationKey?
-  sessions        Session[]
-
-  @@index([userId])
-  @@index([visitorAccessId])
-  @@index([revokedAt])
-}
-
-model DeviceChallenge {
-  id            String   @id @default(cuid())
-  challengeHash String   @unique
-  publicKey     String
-  purpose       String
-  expiresAt     DateTime
-  usedAt        DateTime?
-  createdAt     DateTime @default(now())
-
-  @@index([publicKey])
-  @@index([expiresAt])
-  @@index([purpose])
-}
-
-model ActivationRateLimit {
-  ipHash          String @id
-  attempts        Int    @default(0)
-  windowStartedAt Int
-  blockedUntil    Int?
-  updatedAt       Int
-
-  @@index([blockedUntil])
-}
-enum Role {
-  ADMIN
-  USER
-  MANAGER
-}
-
-enum StatusFuncionario {
-  ATIVO
-  INATIVO
-  AFASTADO
-}
-
-enum StatusCaminhao {
-  LIBERADO
-  CARREGANDO
-  CARREGADO
-  EM_ROTA
-  MANUTENCAO
-}
-
-enum StatusCarregamento {
-  EM_ANDAMENTO
-  FINALIZADO
-  CANCELADO
-  NAO_CARREGADO
-  EM_ROTA
-}
-
-enum StatusItemCarregamento {
-  PENDENTE
-  CARREGADO
-  NAO_CARREGADO
-}
-
-enum TipoFalta {
-  FALTA
-  ATESTADO
-  FOLGA
-  LICENCA
-  OUTRO
-}
-
-enum StatusRota {
-  PLANEJADA
-  EM_ANDAMENTO
-  CONCLUIDA
-  CANCELADA
-}
-
-enum Severidade {
-  INFO
-  WARNING
-  CRITICAL
-}
+// ==========================================
+// AGENDAMENTOS E MANUTENÇÕES PROGRAMADAS
+// ==========================================
 
 enum StatusAgendamentoCarregamento {
   AGENDADO
   CONCLUIDO
   CANCELADO
+}
+
+model AgendamentoCarregamento {
+  id             String                        @id @default(cuid())
+  userId         String
+  user           User                          @relation("AgendamentoCreatedBy", fields: [userId], references: [id], onDelete: Cascade)
+  caminhaoId     String
+  caminhao       Caminhao                      @relation(fields: [caminhaoId], references: [id])
+  peso           Decimal                       @db.Decimal(14, 3)
+  dataHora       DateTime
+  origem         String
+  destino        String
+  status         StatusAgendamentoCarregamento @default(AGENDADO)
+  alertaGeradoEm DateTime?
+  createdAt      DateTime                      @default(now())
+  updatedAt      DateTime                      @updatedAt
+
+  @@index([status, dataHora])
+  @@index([caminhaoId])
+  @@index([userId])
 }
 
 enum StatusManutencaoProgramada {
@@ -494,9 +369,66 @@ enum StatusManutencaoProgramada {
   CANCELADA
 }
 
+model ManutencaoProgramada {
+  id                String                     @id @default(cuid())
+  userId            String
+  user              User                       @relation("ManutencaoCreatedBy", fields: [userId], references: [id], onDelete: Cascade)
+  caminhaoId        String
+  caminhao          Caminhao                   @relation(fields: [caminhaoId], references: [id])
+  descricao         String
+  dataHora          DateTime?
+  quilometragemAlvo Int?
+  status            StatusManutencaoProgramada @default(ATIVA)
+  alertaGeradoEm    DateTime?
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+
+  @@index([status, dataHora])
+  @@index([caminhaoId, quilometragemAlvo])
+  @@index([userId])
+}
+
+// ==========================================
+// NOTIFICAÇÕES PUSH
+// ==========================================
+
+// ==========================================
+// LEMBRETES E DISPOSITIVOS PUSH
+// ==========================================
+
 enum StatusLembrete {
   PENDENTE
+  PROCESSANDO
   ENVIADO
   CANCELADO
-  PROCESSANDO
+}
+
+model Lembrete {
+  id            String         @id @default(cuid())
+  userId        String
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  descricao     String         @db.VarChar(500)
+  dataHora      DateTime
+  status        StatusLembrete @default(PENDENTE)
+  enviadoEm     DateTime?
+  processandoEm DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([userId, status, dataHora])
+  @@index([status, dataHora])
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique @db.Text
+  p256dh    String   @db.Text
+  auth      String   @db.Text
+  userAgent String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
 }

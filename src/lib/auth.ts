@@ -1,8 +1,7 @@
-﻿import * as argon2 from "argon2";
+import * as argon2 from "argon2";
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { prisma } from "./prisma";
-import type { Prisma } from "@prisma/client";
 
 const JWT_SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET || "change-me-in-production-min-32-chars!!"
@@ -31,67 +30,23 @@ export async function verifyPassword(
   }
 }
 
-export async function createSession(
-  userId: string,
-  permissions: unknown = {},
-  role = "USER",
-  deviceAuthorizationId?: string
-) {
-  if (role !== "ADMIN" && !deviceAuthorizationId) {
-    throw new Error("DEVICE_NOT_AUTHORIZED");
-  }
-
+export async function createSession(userId: string, permissions: unknown = {}, role = "USER") {
   const token = crypto.randomUUID() + crypto.randomUUID();
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + SESSION_DAYS);
 
-  await prisma.$transaction(async (tx) => {
-    if (role !== "ADMIN") {
-      const device = await tx.deviceAuthorization.findFirst({
-        where: {
-          id: deviceAuthorizationId,
-          userId,
-          revokedAt: null,
-        },
-        select: { id: true },
-      });
+  await prisma.$transaction([
+    prisma.session.create({ data: { userId, token, expiresAt } }),
+    prisma.user.update({ where: { id: userId }, data: { lastSeenAt: new Date(), lastLoginAt: new Date() } }),
+  ]);
 
-      if (!device) {
-        throw new Error("DEVICE_NOT_AUTHORIZED");
-      }
-    }
-
-    await tx.session.create({
-      data: {
-        userId,
-        token,
-        expiresAt,
-        deviceAuthorizationId: deviceAuthorizationId ?? null,
-      },
-    });
-
-    await tx.user.update({
-      where: { id: userId },
-      data: {
-        lastSeenAt: new Date(),
-        lastLoginAt: new Date(),
-      },
-    });
-  });
-
-  const jwt = await new SignJWT({
-    sub: userId,
-    sid: token,
-    permissions,
-    role,
-  })
+  const jwt = await new SignJWT({ sub: userId, sid: token, permissions, role })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(`${SESSION_DAYS}d`)
     .sign(JWT_SECRET);
 
   const cookieStore = await cookies();
-
   cookieStore.set(COOKIE_NAME, jwt, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
@@ -103,81 +58,6 @@ export async function createSession(
   return jwt;
 }
 
-export async function createVisitorSessionRecord(
-  tx: Prisma.TransactionClient,
-  visitorAccessId: string,
-  deviceAuthorizationId: string,
-  token: string,
-  expiresAt: Date
-) {
-  const now = new Date();
-
-  const visitor = await tx.visitorAccess.findFirst({
-    where: {
-      id: visitorAccessId,
-      revokedAt: null,
-      OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
-    },
-  });
-
-  if (!visitor) throw new Error("VISITOR_ACCESS_INVALID");
-
-  const device = await tx.deviceAuthorization.findFirst({
-    where: {
-      id: deviceAuthorizationId,
-      visitorAccessId,
-      revokedAt: null,
-    },
-    select: { id: true },
-  });
-
-  if (!device) throw new Error("DEVICE_NOT_AUTHORIZED");
-
-  await tx.session.create({
-    data: {
-      visitorAccessId,
-      deviceAuthorizationId,
-      token,
-      expiresAt,
-    },
-  });
-
-  await tx.visitorAccess.update({
-    where: { id: visitorAccessId },
-    data: { lastSeenAt: now },
-  });
-
-  return visitor;
-}
-
-export async function setVisitorSessionCookie(
-  visitor: { id: string; permissions: unknown },
-  token: string,
-  expiresAt: Date
-) {
-  const jwt = await new SignJWT({
-    sub: visitor.id,
-    sid: token,
-    permissions: visitor.permissions ?? {},
-    role: "VISITOR",
-  })
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime(`${SESSION_DAYS}d`)
-    .sign(JWT_SECRET);
-
-  const cookieStore = await cookies();
-
-  cookieStore.set(COOKIE_NAME, jwt, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
-    path: "/",
-    expires: expiresAt,
-  });
-
-  return jwt;
-}
 export async function refreshSessionPermissions(user: { id: string; role: string; permissions: unknown }) {
   const cookieStore = await cookies();
   const token = cookieStore.get(COOKIE_NAME)?.value;
@@ -202,61 +82,31 @@ export async function refreshSessionPermissions(user: { id: string; role: string
 export async function destroySession() {
   const cookieStore = await cookies();
   const jwt = cookieStore.get(COOKIE_NAME)?.value;
-
   if (jwt) {
     try {
       const { payload } = await jwtVerify(jwt, JWT_SECRET);
-      const sid = typeof payload.sid === "string" ? payload.sid : "";
-
+      const sid = payload.sid as string;
       if (sid) {
-        const session = await prisma.session.findUnique({
-          where: { token: sid },
-          select: {
-            userId: true,
-            visitorAccessId: true,
-          },
-        });
-
-        await prisma.session.deleteMany({
-          where: { token: sid },
-        });
-
-        if (session?.userId) {
-          await prisma.user.update({
-            where: { id: session.userId },
-            data: {
-              lastLogoutAt: new Date(),
-              lastSeenAt: new Date(),
-            },
-          });
-        } else if (session?.visitorAccessId) {
-          await prisma.visitorAccess.update({
-            where: { id: session.visitorAccessId },
-            data: { lastSeenAt: new Date() },
-          });
-        }
+        const session = await prisma.session.findUnique({ where: { token: sid }, select: { userId: true } });
+        await prisma.session.deleteMany({ where: { token: sid } });
+        if (session) await prisma.user.update({ where: { id: session.userId }, data: { lastLogoutAt: new Date(), lastSeenAt: new Date() } });
       }
     } catch {
-      // A sessão será encerrada localmente mesmo se a limpeza falhar.
+      // ignore
     }
   }
-
   cookieStore.delete(COOKIE_NAME);
 }
-export async function getCurrentIdentity() {
+
+export async function getCurrentUser() {
   const cookieStore = await cookies();
   const jwt = cookieStore.get(COOKIE_NAME)?.value;
   if (!jwt) return null;
 
   try {
-    const { payload } = await jwtVerify(jwt, JWT_SECRET, {
-      algorithms: ["HS256"],
-    });
-
-    const sid = typeof payload.sid === "string" ? payload.sid : "";
-    if (!sid || typeof payload.sub !== "string") return null;
-
-    const now = new Date();
+    const { payload } = await jwtVerify(jwt, JWT_SECRET);
+    const userId = payload.sub as string;
+    const sid = payload.sid as string;
 
     const session = await prisma.session.findUnique({
       where: { token: sid },
@@ -277,77 +127,20 @@ export async function getCurrentIdentity() {
             lastLogoutAt: true,
           },
         },
-        visitorAccess: {
-          select: {
-            id: true,
-            name: true,
-            permissions: true,
-            expiresAt: true,
-            revokedAt: true,
-          },
-        },
-        deviceAuthorization: {
-          select: {
-            id: true,
-            userId: true,
-            visitorAccessId: true,
-            revokedAt: true,
-          },
-        },
       },
     });
 
-    if (!session || session.expiresAt <= now) return null;
-
-    if (session.user && !session.visitorAccess) {
-      const user = session.user;
-
-      if (payload.sub !== user.id || !user.isActive) return null;
-
-      if (user.role !== "ADMIN") {
-        const device = session.deviceAuthorization;
-
-        if (
-          !device ||
-          device.revokedAt ||
-          device.userId !== user.id
-        ) {
-          return null;
-        }
-      }
-
-      return { type: "USER" as const, user, sessionId: sid };
+    if (!session || session.expiresAt < new Date() || !session.user.isActive) {
+      return null;
     }
 
-    if (!session.user && session.visitorAccess) {
-      const visitor = session.visitorAccess;
-      const device = session.deviceAuthorization;
-
-      if (
-        payload.sub !== visitor.id ||
-        visitor.revokedAt ||
-        (visitor.expiresAt && visitor.expiresAt <= now) ||
-        !device ||
-        device.revokedAt ||
-        device.visitorAccessId !== visitor.id
-      ) {
-        return null;
-      }
-
-      return { type: "VISITOR" as const, visitor, sessionId: sid };
-    }
-
-    return null;
+    return session.user;
   } catch {
     return null;
   }
 }
 
-export async function getCurrentUser() {
-  const identity = await getCurrentIdentity();
-
-  return identity?.type === "USER" ? identity.user : null;
-}export async function requireAuth() {
+export async function requireAuth() {
   const user = await getCurrentUser();
   if (!user) {
     throw new Error("UNAUTHORIZED");
@@ -370,6 +163,3 @@ export async function verifyAdminPassword(password: string): Promise<boolean> {
   if (!admin) return false;
   return verifyPassword(admin.passwordHash, password);
 }
-
-
-

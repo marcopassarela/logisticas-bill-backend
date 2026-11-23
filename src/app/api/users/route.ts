@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getCurrentUser, hashPassword, verifyPassword, verifyAdminPassword } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccess, normalizePermissions } from "@/lib/permissions";
-import { getOnlineUserIds, publishAuthInvalidatedForClient, publishDataChanged, removeOnlineUserPresence } from "@/lib/realtime";
+import { getOnlineUserIds, publishDataChanged } from "@/lib/realtime";
 
 const publicSelect = {
   id: true, username: true, name: true, role: true, cargoUsuario: true, funcionarioId: true, isActive: true,
@@ -22,7 +22,6 @@ const createSchema = z.object({
 
 const updateSchema = z.object({
   id: z.string().min(1),
-  type: z.enum(["USER", "VISITOR"]).optional(),
   username: z.string().trim().min(3).max(50).optional(),
   name: z.string().trim().min(2).max(100).optional(),
   password: z.string().min(4).max(128).optional(),
@@ -51,19 +50,10 @@ export async function GET() {
     });
   }
 
-  const [users, visitors] = await Promise.all([
-    prisma.user.findMany({
-      orderBy: [{ role: "asc" }, { name: "asc" }],
-      select: publicSelect,
-    }),
-    prisma.visitorAccess.findMany({
-      orderBy: { createdAt: "desc" },
-      select: {
-        id: true, name: true, permissions: true, expiresAt: true,
-        revokedAt: true, createdAt: true, lastSeenAt: true,
-      },
-    }),
-  ]);
+  const users = await prisma.user.findMany({
+    orderBy: [{ role: "asc" }, { name: "asc" }],
+    select: publicSelect,
+  });
 
   return NextResponse.json({
     admin: true,
@@ -71,11 +61,6 @@ export async function GET() {
       ...user,
       permissions: normalizePermissions(user.permissions),
       online: onlineUserIds?.has(user.id) ?? false,
-    })),
-    visitors: visitors.map((visitor) => ({
-      ...visitor,
-      permissions: normalizePermissions(visitor.permissions),
-      online: onlineUserIds?.has(visitor.id) ?? false,
     })),
   });
 }
@@ -113,46 +98,6 @@ export async function PATCH(req: NextRequest) {
 
   try {
     const data = updateSchema.parse(await req.json());
-    if (data.type === "VISITOR") {
-      if (current.role !== "ADMIN") {
-        return NextResponse.json({ error: "Apenas administradores podem alterar visitantes." }, { status: 403 });
-      }
-      if (data.permissions === undefined) {
-        return NextResponse.json({ error: "Informe as permissões do visitante." }, { status: 400 });
-      }
-
-      const existingVisitor = await prisma.visitorAccess.findUnique({
-        where: { id: data.id },
-        select: { id: true, revokedAt: true, expiresAt: true },
-      });
-
-      if (!existingVisitor) {
-        return NextResponse.json({ error: "Visitante não encontrado." }, { status: 404 });
-      }
-      if (existingVisitor.revokedAt || (existingVisitor.expiresAt && existingVisitor.expiresAt <= new Date())) {
-        return NextResponse.json({ error: "Não é possível alterar permissões de um acesso encerrado." }, { status: 409 });
-      }
-
-      const visitor = await prisma.visitorAccess.update({
-        where: { id: data.id },
-        data: { permissions: normalizePermissions(data.permissions) },
-        select: {
-          id: true, name: true, permissions: true, expiresAt: true,
-          revokedAt: true, createdAt: true, lastSeenAt: true,
-        },
-      });
-
-      const onlineUserIds = await getOnlineUserIds();
-      void publishDataChanged("usuarios");
-      return NextResponse.json({
-        visitor: {
-          ...visitor,
-          permissions: normalizePermissions(visitor.permissions),
-          online: onlineUserIds?.has(visitor.id) ?? false,
-        },
-      });
-    }
-
     const isSelf = data.id === current.id;
     if (current.role !== "ADMIN" && !isSelf) return NextResponse.json({ error: "Sem permissão." }, { status: 403 });
     if (current.role !== "ADMIN" && (data.role !== undefined || data.isActive !== undefined || data.permissions !== undefined)) {
@@ -203,71 +148,8 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: "Você não tem permissão para excluir usuários." }, { status: 403 });
   }
   const body = await req.json().catch(() => ({}));
-  const id = String(body.id || "");
-
-  if (body.type === "VISITOR") {
-    if (current.role !== "ADMIN") {
-      return NextResponse.json({ error: "Apenas administradores podem revogar visitantes." }, { status: 403 });
-    }
-    if (!id) return NextResponse.json({ error: "Visitante não informado." }, { status: 400 });
-    if (!(await verifyAdminPassword(String(body.adminPassword || "")))) {
-      return NextResponse.json({ error: "Senha do administrador inválida." }, { status: 403 });
-    }
-
-    const now = new Date();
-    const result = await prisma.$transaction(async (tx) => {
-      const existing = await tx.visitorAccess.findUnique({
-        where: { id },
-        select: { id: true, name: true, revokedAt: true },
-      });
-      if (!existing) return null;
-
-      const sessions = await tx.session.findMany({
-        where: { visitorAccessId: id },
-        select: { token: true },
-      });
-
-      await tx.visitorAccess.update({
-        where: { id },
-        data: { revokedAt: existing.revokedAt ?? now },
-      });
-      await tx.deviceAuthorization.updateMany({
-        where: { visitorAccessId: id, revokedAt: null },
-        data: { revokedAt: now },
-      });
-      await tx.session.deleteMany({ where: { visitorAccessId: id } });
-      await tx.activationKey.deleteMany({ where: { visitorAccessId: id } });
-
-      if (!existing.revokedAt) {
-        await tx.auditLog.create({
-          data: {
-            userId: current.id,
-            action: "VISITOR_ACCESS_REVOKED",
-            entity: "VisitorAccess",
-            entityId: id,
-          },
-        });
-      }
-
-      return {
-        visitor: existing,
-        sessionIds: sessions.map((session) => session.token),
-      };
-    });
-
-    if (!result) return NextResponse.json({ error: "Visitante não encontrado." }, { status: 404 });
-
-    for (const sessionId of result.sessionIds) {
-      await publishAuthInvalidatedForClient(sessionId);
-    }
-
-    await removeOnlineUserPresence(id);
-
-    void publishDataChanged("usuarios");
-    return NextResponse.json({ ok: true, visitorId: id, revoked: true });
-  }
-
   if (!(await verifyAdminPassword(String(body.adminPassword || "")))) return NextResponse.json({ error: "Senha do administrador inválida." }, { status: 403 });
+  const id = String(body.id || "");
   if (!id || id === current.id) return NextResponse.json({ error: "Não é possível excluir o usuário atual." }, { status: 400 });
   await prisma.user.delete({ where: { id } });
   await prisma.auditLog.create({ data: { userId: current.id, action: "USUARIO_EXCLUIDO", entity: "User", entityId: id } });

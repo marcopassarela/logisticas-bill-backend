@@ -1,44 +1,22 @@
-﻿import { NextResponse } from "next/server";
-import {
-  getCurrentIdentity,
-  refreshSessionPermissions,
-} from "@/lib/auth";
+import { NextResponse } from "next/server";
+import { getCurrentUser, refreshSessionPermissions } from "@/lib/auth";
 
 export async function POST() {
-  const identity = await getCurrentIdentity();
+  const user = await getCurrentUser();
 
-  if (!identity) {
-    return NextResponse.json(
-      { error: "Não autorizado" },
-      { status: 401 }
-    );
+  if (!user) {
+    return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
   }
 
-  const permissaoAtualizada =
-    identity.type === "USER"
-      ? await refreshSessionPermissions({
-          id: identity.user.id,
-          role: identity.user.role,
-          permissions: identity.user.permissions,
-        })
-      : await refreshSessionPermissions({
-          id: identity.visitor.id,
-          role: "VISITOR",
-          permissions: identity.visitor.permissions ?? {
-            dashboard: true,
-            "dashboard.visualizar": true,
-          },
-        });
+  const permissaoAtualizada = await refreshSessionPermissions({
+    id: user.id,
+    role: user.role,
+    permissions: user.permissions,
+  });
 
   if (!permissaoAtualizada) {
-    return NextResponse.json(
-      { error: "Sessão inválida" },
-      { status: 401 }
-    );
+    return NextResponse.json({ error: "Sessão inválida" }, { status: 401 });
   }
 
-  return NextResponse.json({
-    ok: true,
-    identity: identity.type,
-  });
+  return NextResponse.json({ ok: true });
 }
