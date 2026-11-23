@@ -24,7 +24,10 @@ export async function POST() {
       : await refreshSessionPermissions({
           id: identity.visitor.id,
           role: "VISITOR",
-          permissions: identity.visitor.permissions ?? {},
+          permissions: identity.visitor.permissions ?? {
+            dashboard: true,
+            "dashboard.visualizar": true,
+          },
         });
 
   if (!permissaoAtualizada) {
