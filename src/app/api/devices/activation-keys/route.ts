@@ -12,6 +12,10 @@ const createSchema = z.object({
   expiresAt: z.string().datetime().nullable().optional(),
 });
 
+const revokeSchema = z.object({
+  keyId: z.string().min(1),
+});
+
 function generateActivationCode() {
   const random = randomBytes(20).toString("hex").toUpperCase();
   const groups = random.match(/.{4}/g) ?? [];
@@ -240,6 +244,192 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(
       { error: "Não foi possível gerar a chave de ativação." },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const admin = await getCurrentUser();
+
+    if (!admin || admin.role !== "ADMIN") {
+      return NextResponse.json(
+        { error: "Acesso permitido somente ao administrador." },
+        { status: 403 }
+      );
+    }
+
+    const parsed = revokeSchema.safeParse(await req.json());
+
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: "Identificador da chave inválido." },
+        { status: 400 }
+      );
+    }
+
+    const { keyId } = parsed.data;
+    const now = new Date();
+
+    const result = await prisma.$transaction(async (tx) => {
+      const existing = await tx.activationKey.findUnique({
+        where: { id: keyId },
+        select: {
+          id: true,
+          closedReason: true,
+          visitorAccess: {
+            select: { revokedAt: true },
+          },
+        },
+      });
+
+      if (!existing) {
+        return { ok: false as const, reason: "NOT_FOUND" as const };
+      }
+
+      if (
+        existing.closedReason === "REVOKED" ||
+        existing.visitorAccess?.revokedAt
+      ) {
+        return { ok: true as const };
+      }
+
+      if (existing.closedReason === "EXPIRED") {
+        return { ok: false as const, reason: "EXPIRED" as const };
+      }
+
+      const claimed = await tx.activationKey.updateMany({
+        where: {
+          id: keyId,
+          closedAt: null,
+          OR: [
+            { usedAt: { not: null } },
+            {
+              usedAt: null,
+              OR: [
+                { expiresAt: null },
+                { expiresAt: { gt: now } },
+              ],
+            },
+          ],
+        },
+        data: {
+          closedAt: now,
+          closedReason: "REVOKED",
+        },
+      });
+
+      if (claimed.count !== 1) {
+        const current = await tx.activationKey.findUnique({
+          where: { id: keyId },
+          select: {
+            closedReason: true,
+            usedAt: true,
+            expiresAt: true,
+            visitorAccess: {
+              select: { revokedAt: true },
+            },
+          },
+        });
+
+        if (!current) {
+          return { ok: false as const, reason: "NOT_FOUND" as const };
+        }
+
+        if (
+          current.closedReason === "REVOKED" ||
+          current.visitorAccess?.revokedAt
+        ) {
+          return { ok: true as const };
+        }
+
+        if (
+          current.closedReason === "EXPIRED" ||
+          (!current.usedAt &&
+            current.expiresAt &&
+            current.expiresAt <= now)
+        ) {
+          return { ok: false as const, reason: "EXPIRED" as const };
+        }
+
+        return { ok: false as const, reason: "CONFLICT" as const };
+      }
+
+      const key = await tx.activationKey.findUnique({
+        where: { id: keyId },
+        select: {
+          targetUserId: true,
+          visitorAccessId: true,
+          deviceAuthorizationId: true,
+        },
+      });
+
+      if (!key) {
+        throw new Error("ACTIVATION_KEY_NOT_FOUND_AFTER_CLAIM");
+      }
+
+      if (key.targetUserId && key.deviceAuthorizationId) {
+        await tx.deviceAuthorization.updateMany({
+          where: {
+            id: key.deviceAuthorizationId,
+            revokedAt: null,
+          },
+          data: { revokedAt: now },
+        });
+      }
+
+      if (key.visitorAccessId) {
+        await tx.visitorAccess.updateMany({
+          where: {
+            id: key.visitorAccessId,
+            revokedAt: null,
+          },
+          data: { revokedAt: now },
+        });
+
+        await tx.deviceAuthorization.updateMany({
+          where: {
+            visitorAccessId: key.visitorAccessId,
+            revokedAt: null,
+          },
+          data: { revokedAt: now },
+        });
+      }
+
+      return { ok: true as const };
+    });
+
+    if (!result.ok) {
+      if (result.reason === "EXPIRED") {
+        return NextResponse.json(
+          { error: "Esta chave já expirou e não pode ser revogada." },
+          { status: 409 }
+        );
+      }
+
+      if (result.reason === "CONFLICT") {
+        return NextResponse.json(
+          { error: "A chave foi alterada simultaneamente. Atualize a lista e tente novamente." },
+          { status: 409 }
+        );
+      }
+
+      return NextResponse.json(
+        { error: "Chave não encontrada." },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      ok: true,
+      message: "Acesso revogado com sucesso.",
+    });
+  } catch (error) {
+    console.error("Erro ao revogar acesso:", error);
+
+    return NextResponse.json(
+      { error: "Não foi possível revogar o acesso." },
       { status: 500 }
     );
   }
