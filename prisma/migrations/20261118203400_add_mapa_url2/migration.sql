@@ -1,1 +1,0 @@
-ALTER TABLE "CarregamentoItem" ADD COLUMN IF NOT EXISTS "mapaUrl2" TEXT;

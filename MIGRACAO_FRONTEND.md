@@ -4,7 +4,7 @@ No frontend Vercel, configure `BACKEND_API_URL` com a URL HTTPS do Render. O `ne
 
 Após confirmar o funcionamento no Render:
 
-1. Remova `DATABASE_URL` e `DIRECT_URL` da Vercel.
+1. Remova `DATABASE_URL`, `DIRECT_URL`, `TURSO_DATABASE_URL` e `TURSO_AUTH_TOKEN` da Vercel.
 2. Remova `ABLY_API_KEY`, `BLOB_READ_WRITE_TOKEN` e demais segredos que só o backend utiliza.
 3. Mantenha `JWT_SECRET` somente no Render; ele deve ser igual no frontend apenas se o middleware local continuar validando o JWT. A etapa final recomendada é retirar a validação JWT do middleware do frontend e deixar a autorização no backend.
 4. Faça deploy do frontend e teste login, logout, carregamentos, notas fiscais, usuários, permissões e realtime.

@@ -114,7 +114,7 @@ export async function POST(req: NextRequest) {
       }
     >;
     try {
-      // Validar os PDFs antes da transação evita manter blobs no PostgreSQL.
+      // Validar os PDFs antes da transação evita manter blobs no banco.
       itensCompactados = data.itens.map((item) => {
         if (item.notaFiscalData) decodePdfDataUrl(item.notaFiscalData);
         return { ...item, notaFiscalData: null };
