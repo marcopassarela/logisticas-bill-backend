@@ -1,4 +1,4 @@
-import { publishAuthInvalidated } from "@/lib/realtime";
+import { publishAuthInvalidatedForClient } from "@/lib/realtime";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
@@ -14,6 +14,7 @@ export async function GET() {
   if (identity.type === "VISITOR") {
     return NextResponse.json({
       id: identity.visitor.id,
+      sessionId: identity.sessionId,
       username: null,
       name: identity.visitor.name,
       role: "VISITOR",
@@ -33,6 +34,7 @@ export async function GET() {
 
   return NextResponse.json({
     id: sessionUser.id,
+    sessionId: identity.sessionId,
     username: sessionUser.username,
     name: sessionUser.name,
     role: sessionUser.role,
@@ -116,14 +118,29 @@ export async function PATCH(req: NextRequest) {
         return NextResponse.json({ error: "A senha atual está incorreta." }, { status: 403 });
       }
 
-      await prisma.$transaction([
-        prisma.user.update({
+      const newPasswordHash = await hashPassword(data.newPassword);
+
+      const sessionIds = await prisma.$transaction(async (tx) => {
+        const sessions = await tx.session.findMany({
+          where: { userId: sessionUser.id },
+          select: { token: true },
+        });
+
+        await tx.user.update({
           where: { id: sessionUser.id },
-          data: { passwordHash: await hashPassword(data.newPassword) },
-        }),
-        prisma.session.deleteMany({ where: { userId: sessionUser.id } }),
-      ]);
-      await publishAuthInvalidated();
+          data: { passwordHash: newPasswordHash },
+        });
+
+        await tx.session.deleteMany({
+          where: { userId: sessionUser.id },
+        });
+
+        return sessions.map((session) => session.token);
+      });
+
+      for (const sessionId of sessionIds) {
+        await publishAuthInvalidatedForClient(sessionId);
+      }
 
       return NextResponse.json({ ok: true, sessionsInvalidated: true });
     }

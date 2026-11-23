@@ -343,7 +343,18 @@ export async function PATCH(req: NextRequest) {
         }
       }
 
+      const sessionIds: string[] = [];
+
       if (existing.targetUserId && existing.deviceAuthorizationId) {
+        const sessions = await tx.session.findMany({
+          where: {
+            deviceAuthorizationId: existing.deviceAuthorizationId,
+          },
+          select: { token: true },
+        });
+
+        sessionIds.push(...sessions.map((session) => session.token));
+
         await tx.deviceAuthorization.updateMany({
           where: {
             id: existing.deviceAuthorizationId,
@@ -360,6 +371,15 @@ export async function PATCH(req: NextRequest) {
       }
 
       if (existing.visitorAccessId) {
+        const sessions = await tx.session.findMany({
+          where: {
+            visitorAccessId: existing.visitorAccessId,
+          },
+          select: { token: true },
+        });
+
+        sessionIds.push(...sessions.map((session) => session.token));
+
         await tx.visitorAccess.updateMany({
           where: {
             id: existing.visitorAccessId,
@@ -383,10 +403,7 @@ export async function PATCH(req: NextRequest) {
         });
       }
 
-      const clientId = existing.visitorAccessId ??
-        (existing.deviceAuthorizationId ? existing.targetUserId : null);
-
-      return { ok: true as const, clientId };
+      return { ok: true as const, sessionIds };
     });
 
     if (!result.ok) {
@@ -403,8 +420,8 @@ export async function PATCH(req: NextRequest) {
       );
     }
 
-    if (result.clientId) {
-      await publishAuthInvalidatedForClient(result.clientId);
+    for (const sessionId of result.sessionIds) {
+      await publishAuthInvalidatedForClient(sessionId);
     }
 
     await publishDataChanged("usuarios");

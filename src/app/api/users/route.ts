@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getCurrentUser, hashPassword, verifyPassword, verifyAdminPassword } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canAccess, normalizePermissions } from "@/lib/permissions";
-import { getOnlineUserIds, publishDataChanged, removeOnlineUserPresence } from "@/lib/realtime";
+import { getOnlineUserIds, publishAuthInvalidatedForClient, publishDataChanged, removeOnlineUserPresence } from "@/lib/realtime";
 
 const publicSelect = {
   id: true, username: true, name: true, role: true, cargoUsuario: true, funcionarioId: true, isActive: true,
@@ -215,12 +215,17 @@ export async function DELETE(req: NextRequest) {
     }
 
     const now = new Date();
-    const visitor = await prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       const existing = await tx.visitorAccess.findUnique({
         where: { id },
         select: { id: true, name: true, revokedAt: true },
       });
       if (!existing) return null;
+
+      const sessions = await tx.session.findMany({
+        where: { visitorAccessId: id },
+        select: { token: true },
+      });
 
       await tx.visitorAccess.update({
         where: { id },
@@ -244,10 +249,17 @@ export async function DELETE(req: NextRequest) {
         });
       }
 
-      return existing;
+      return {
+        visitor: existing,
+        sessionIds: sessions.map((session) => session.token),
+      };
     });
 
-    if (!visitor) return NextResponse.json({ error: "Visitante não encontrado." }, { status: 404 });
+    if (!result) return NextResponse.json({ error: "Visitante não encontrado." }, { status: 404 });
+
+    for (const sessionId of result.sessionIds) {
+      await publishAuthInvalidatedForClient(sessionId);
+    }
 
     await removeOnlineUserPresence(id);
 

@@ -25,10 +25,7 @@ export async function GET() {
       );
     }
 
-    const clientId =
-      identity.type === "VISITOR"
-        ? identity.visitor.id
-        : identity.user.id;
+    const clientId = identity.sessionId;
 
     const ably = createHttpClient({ key: apiKey });
 

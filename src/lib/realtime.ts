@@ -41,11 +41,6 @@ export function publishDataChanged(...modules: string[]) {
   return publish("data:changed", { modules });
 }
 
-export function publishAuthInvalidated() {
-  return publish("auth:invalidate", {
-    reason: "password_changed",
-  });
-}
 
 export function publishAuthInvalidatedForClient(clientId: string) {
   if (!clientId) return Promise.resolve();
@@ -71,8 +66,8 @@ function getAblyRealtimeClient(): AblyRealtimeClient | null {
   return globalForAbly.__logisticaAblyRealtime;
 }
 
-export async function removeOnlineUserPresence(clientId: string): Promise<boolean> {
-  if (!clientId) return false;
+export async function removeOnlineUserPresence(identityId: string): Promise<boolean> {
+  if (!identityId) return false;
 
   try {
     const ably = getAblyRealtimeClient();
@@ -82,11 +77,23 @@ export async function removeOnlineUserPresence(clientId: string): Promise<boolea
 
     const channel = ably.channels.get("logistica-global");
     await channel.attach();
-    await channel.presence.leaveClient(clientId);
+
+    const members = await channel.presence.get();
+
+    const sessionIds = members
+      .filter((member) => {
+        const data = member.data as { identityId?: string } | undefined;
+        return data?.identityId === identityId && Boolean(member.clientId);
+      })
+      .map((member) => member.clientId);
+
+    for (const sessionId of sessionIds) {
+      await channel.presence.leaveClient(sessionId);
+    }
 
     return true;
   } catch (error) {
-    console.error("Falha ao remover presenca no Ably:", error);
+    console.error("Falha ao remover presença no Ably:", error);
     return false;
   }
 }
@@ -101,7 +108,8 @@ export async function getOnlineUserIds(): Promise<Set<string> | null> {
 
     while (page) {
       for (const member of page.items) {
-        if (member.clientId) onlineUserIds.add(member.clientId);
+        const data = member.data as { identityId?: string } | undefined;
+        if (data?.identityId) onlineUserIds.add(data.identityId);
       }
       page = await page.next();
     }

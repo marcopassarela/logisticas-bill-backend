@@ -316,7 +316,7 @@ export async function getCurrentIdentity() {
         }
       }
 
-      return { type: "USER" as const, user };
+      return { type: "USER" as const, user, sessionId: sid };
     }
 
     if (!session.user && session.visitorAccess) {
@@ -334,7 +334,7 @@ export async function getCurrentIdentity() {
         return null;
       }
 
-      return { type: "VISITOR" as const, visitor };
+      return { type: "VISITOR" as const, visitor, sessionId: sid };
     }
 
     return null;
