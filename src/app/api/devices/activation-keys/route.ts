@@ -295,23 +295,13 @@ export async function PATCH(req: NextRequest) {
         return { ok: true as const };
       }
 
-      if (existing.closedReason === "EXPIRED") {
-        return { ok: false as const, reason: "EXPIRED" as const };
-      }
 
       const claimed = await tx.activationKey.updateMany({
         where: {
           id: keyId,
-          closedAt: null,
           OR: [
-            { usedAt: { not: null } },
-            {
-              usedAt: null,
-              OR: [
-                { expiresAt: null },
-                { expiresAt: { gt: now } },
-              ],
-            },
+            { closedReason: "EXPIRED" },
+            { closedAt: null },
           ],
         },
         data: {
@@ -344,14 +334,6 @@ export async function PATCH(req: NextRequest) {
           return { ok: true as const };
         }
 
-        if (
-          current.closedReason === "EXPIRED" ||
-          (!current.usedAt &&
-            current.expiresAt &&
-            current.expiresAt <= now)
-        ) {
-          return { ok: false as const, reason: "EXPIRED" as const };
-        }
 
         return { ok: false as const, reason: "CONFLICT" as const };
       }
@@ -401,13 +383,6 @@ export async function PATCH(req: NextRequest) {
     });
 
     if (!result.ok) {
-      if (result.reason === "EXPIRED") {
-        return NextResponse.json(
-          { error: "Esta chave já expirou e não pode ser revogada." },
-          { status: 409 }
-        );
-      }
-
       if (result.reason === "CONFLICT") {
         return NextResponse.json(
           { error: "A chave foi alterada simultaneamente. Atualize a lista e tente novamente." },
