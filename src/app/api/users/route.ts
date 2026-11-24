@@ -6,13 +6,14 @@ import { canAccess, normalizePermissions } from "@/lib/permissions";
 import { getOnlineUserIds, publishDataChanged } from "@/lib/realtime";
 
 const publicSelect = {
-  id: true, username: true, name: true, role: true, cargoUsuario: true, funcionarioId: true, isActive: true,
+  id: true, username: true, name: true, email: true, role: true, cargoUsuario: true, funcionarioId: true, isActive: true,
   permissions: true, lastSeenAt: true, lastLoginAt: true, lastLogoutAt: true, createdAt: true,
 } as const;
 
 const createSchema = z.object({
   username: z.string().trim().min(3).max(50),
   name: z.string().trim().min(2).max(100),
+  email: z.string().trim().email("E-mail inválido").min(1, "E-mail obrigatório"),
   password: z.string().min(4).max(128),
   cargoUsuario: z.string().trim().min(2).max(60).optional().nullable(),
   funcionarioId: z.string().optional().nullable(),
@@ -24,6 +25,7 @@ const updateSchema = z.object({
   id: z.string().min(1),
   username: z.string().trim().min(3).max(50).optional(),
   name: z.string().trim().min(2).max(100).optional(),
+  email: z.string().trim().email("E-mail inválido").optional().nullable(),
   password: z.string().min(4).max(128).optional(),
   currentPassword: z.string().min(1).optional(),
   cargoUsuario: z.string().trim().min(2).max(60).optional().nullable(),
@@ -74,6 +76,7 @@ export async function POST(req: NextRequest) {
       data: {
         username: data.username,
         name: data.name,
+        email: data.email.toLowerCase(),
         passwordHash: await hashPassword(data.password),
         role: data.role,
         cargoUsuario: data.cargoUsuario || null,
@@ -86,7 +89,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ user }, { status: 201 });
   } catch (error) {
     if (typeof error === "object" && error && "code" in error && error.code === "P2002") {
-      return NextResponse.json({ error: "Este nome de usuário já está em uso." }, { status: 409 });
+      return NextResponse.json({ error: "Nome de usuário ou e-mail já está em uso." }, { status: 409 });
     }
     return NextResponse.json({ error: "Dados inválidos para cadastro." }, { status: 400 });
   }
@@ -113,6 +116,7 @@ export async function PATCH(req: NextRequest) {
     const update: Record<string, unknown> = {};
     if (data.username !== undefined) update.username = data.username;
     if (data.name !== undefined) update.name = data.name;
+    if (data.email !== undefined) update.email = data.email ? data.email.toLowerCase() : null;
     if (data.cargoUsuario !== undefined) update.cargoUsuario = data.cargoUsuario || null;
     if (data.funcionarioId !== undefined && current.role === "ADMIN") update.funcionarioId = data.funcionarioId || null;
     if (data.password !== undefined) update.passwordHash = await hashPassword(data.password);
@@ -135,7 +139,7 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ user });
   } catch (error) {
     if (typeof error === "object" && error && "code" in error && error.code === "P2002") {
-      return NextResponse.json({ error: "Este nome de usuário já está em uso." }, { status: 409 });
+      return NextResponse.json({ error: "Nome de usuário ou e-mail já está em uso." }, { status: 409 });
     }
     return NextResponse.json({ error: "Não foi possível atualizar o usuário." }, { status: 400 });
   }

@@ -1,7 +1,13 @@
 import * as argon2 from "argon2";
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
-import { prisma } from "./prisma";
+
+// O frontend usa o backend Render quando BACKEND_API_URL está configurada.
+// O Prisma é carregado sob demanda para não tentar abrir Aiven/PostgreSQL na Vercel.
+async function getLocalPrisma() {
+  const { prisma } = await import("./prisma");
+  return prisma;
+}
 
 const JWT_SECRET = new TextEncoder().encode(
   process.env.JWT_SECRET || "change-me-in-production-min-32-chars!!"
@@ -13,9 +19,10 @@ const SESSION_DAYS = 7;
 export async function hashPassword(password: string): Promise<string> {
   return argon2.hash(password, {
     type: argon2.argon2id,
-    memoryCost: 65536, // 64 MB
-    timeCost: 3,
-    parallelism: 4,
+    // Parâmetros equilibrados para serverless (Render/Vercel) — mais rápidos e ainda seguros.
+    memoryCost: 19456, // ~19 MB
+    timeCost: 2,
+    parallelism: 1,
   });
 }
 
@@ -31,6 +38,7 @@ export async function verifyPassword(
 }
 
 export async function createSession(userId: string, permissions: unknown = {}, role = "USER") {
+  const prisma = await getLocalPrisma();
   const token = crypto.randomUUID() + crypto.randomUUID();
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + SESSION_DAYS);
@@ -50,7 +58,7 @@ export async function createSession(userId: string, permissions: unknown = {}, r
   cookieStore.set(COOKIE_NAME, jwt, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+    sameSite: "lax",
     path: "/",
     expires: expiresAt,
   });
@@ -72,7 +80,7 @@ export async function refreshSessionPermissions(user: { id: string; role: string
       .setIssuedAt()
       .setExpirationTime(exp)
       .sign(JWT_SECRET);
-    cookieStore.set(COOKIE_NAME, refreshedJwt, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: process.env.NODE_ENV === "production" ? "none" : "lax", path: "/", expires: new Date(exp * 1000) });
+    cookieStore.set(COOKIE_NAME, refreshedJwt, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", expires: new Date(exp * 1000) });
     return true;
   } catch {
     return false;
@@ -87,6 +95,7 @@ export async function destroySession() {
       const { payload } = await jwtVerify(jwt, JWT_SECRET);
       const sid = payload.sid as string;
       if (sid) {
+        const prisma = await getLocalPrisma();
         const session = await prisma.session.findUnique({ where: { token: sid }, select: { userId: true } });
         await prisma.session.deleteMany({ where: { token: sid } });
         if (session) await prisma.user.update({ where: { id: session.userId }, data: { lastLogoutAt: new Date(), lastSeenAt: new Date() } });
@@ -103,10 +112,25 @@ export async function getCurrentUser() {
   const jwt = cookieStore.get(COOKIE_NAME)?.value;
   if (!jwt) return null;
 
+  const backendUrl = process.env.BACKEND_API_URL?.replace(/\/$/, "");
+  if (backendUrl) {
+    try {
+      const response = await fetch(`${backendUrl}/api/auth/profile`, {
+        headers: { cookie: `${COOKIE_NAME}=${jwt}` },
+        cache: "no-store",
+      });
+      if (!response.ok) return null;
+      return await response.json();
+    } catch {
+      return null;
+    }
+  }
+
   try {
     const { payload } = await jwtVerify(jwt, JWT_SECRET);
     const userId = payload.sub as string;
     const sid = payload.sid as string;
+    const prisma = await getLocalPrisma();
 
     const session = await prisma.session.findUnique({
       where: { token: sid },
@@ -157,6 +181,7 @@ export async function requireAdmin() {
 }
 
 export async function verifyAdminPassword(password: string): Promise<boolean> {
+  const prisma = await getLocalPrisma();
   const admin = await prisma.user.findFirst({
     where: { role: "ADMIN", isActive: true },
   });
