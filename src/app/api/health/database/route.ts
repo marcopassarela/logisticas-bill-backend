@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { createClient } from "@libsql/client";
+
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
@@ -20,8 +22,18 @@ export async function GET() {
   }
 
   try {
-    const { prisma } = await import("@/lib/prisma");
-    await prisma.$queryRaw`SELECT 1`;
+    // Usa o cliente libSQL diretamente neste endpoint para que o diagnóstico
+    // continue funcionando mesmo se o Prisma Client/adapter falhar ao carregar.
+    const client = createClient({
+      url: databaseUrl,
+      authToken,
+    });
+
+    try {
+      await client.execute("SELECT 1");
+    } finally {
+      client.close();
+    }
 
     return NextResponse.json(
       { ok: true },
@@ -37,11 +49,18 @@ export async function GET() {
       error: message.slice(0, 500),
     });
     return NextResponse.json(
-      { ok: false, error: "TURSO_CONNECTION_FAILED", configuration },
+      {
+        ok: false,
+        error: "TURSO_CONNECTION_FAILED",
+        configuration,
+      },
       {
         status: 503,
-        headers: { "Cache-Control": "no-store, max-age=0" },
-      }
+        headers: {
+          "Cache-Control": "no-store, max-age=0",
+          "Content-Type": "application/json; charset=utf-8",
+        },
+      },
     );
   }
 }

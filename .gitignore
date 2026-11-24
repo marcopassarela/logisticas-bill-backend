@@ -7,10 +7,4 @@ dist/
 .env.*
 !.env.example
 npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
 .vercel/
-.turbo/
-.DS_Store
-Thumbs.db
