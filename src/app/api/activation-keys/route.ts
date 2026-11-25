@@ -208,21 +208,17 @@ export async function DELETE(req: NextRequest) {
     }
 
     const result = await prisma.activationKey.deleteMany({
-      where: {
-        id,
-        usedAt: null,
-        closedAt: null,
-      },
+      where: { id },
     });
 
     if (result.count === 0) {
       return NextResponse.json(
-        { error: "Chave não encontrada, já utilizada ou já revogada." },
-        { status: 409 },
+        { error: "Chave não encontrada." },
+        { status: 404 },
       );
     }
 
-    return NextResponse.json({ ok: true, message: "Chave excluída." });
+    return NextResponse.json({ ok: true, message: "Registro da chave removido." });
   } catch (error) {
     console.error("activation-keys DELETE:", error);
     return NextResponse.json(
