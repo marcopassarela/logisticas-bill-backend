@@ -207,15 +207,11 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: "ID da chave obrigatório." }, { status: 400 });
     }
 
-    const result = await prisma.activationKey.updateMany({
+    const result = await prisma.activationKey.deleteMany({
       where: {
         id,
         usedAt: null,
         closedAt: null,
-      },
-      data: {
-        closedAt: new Date(),
-        closedReason: "REVOKED",
       },
     });
 
@@ -226,7 +222,7 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
-    return NextResponse.json({ ok: true, message: "Chave revogada." });
+    return NextResponse.json({ ok: true, message: "Chave excluída." });
   } catch (error) {
     console.error("activation-keys DELETE:", error);
     return NextResponse.json(
