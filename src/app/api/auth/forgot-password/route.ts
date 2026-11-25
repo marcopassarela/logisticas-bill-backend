@@ -22,14 +22,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const user = await prisma.user.findFirst({
-      where: {
-        username: { equals: username, mode: "insensitive" },
-        email: { equals: email, mode: "insensitive" },
-        isActive: true,
-      },
-      select: { id: true, name: true, username: true, email: true },
-    });
+    const users = await prisma.$queryRaw<
+      Array<{ id: string; name: string; username: string; email: string | null }>
+    >`
+      SELECT id, name, username, email
+      FROM "User"
+      WHERE LOWER(username) = LOWER(${username})
+        AND LOWER(email) = LOWER(${email})
+        AND isActive = 1
+      LIMIT 1
+    `;
+
+    const user = users[0] ?? null;
 
     // Resposta genérica (não revela se o usuário existe)
     const generic = {

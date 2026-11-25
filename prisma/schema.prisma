@@ -4,9 +4,8 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider = "sqlite"
+  url      = "file:./dev.db"
 }
 
 model User {
@@ -38,7 +37,8 @@ model User {
   pushSubscriptions   PushSubscription[]
   auditLogs           AuditLog[]
   passwordResetTokens PasswordResetToken[]
-  activationKeysUsed  ActivationKey[]          @relation("ActivationKeyUsedBy")
+  activationKeysTarget ActivationKey[]          @relation("ActivationKeyTargetUser")
+  deviceAuthorizations DeviceAuthorization[]
 }
 
 enum Role {
@@ -48,14 +48,17 @@ enum Role {
 }
 
 model Session {
-  id        String   @id @default(cuid())
-  userId    String
-  token     String   @unique
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                    String                @id @default(cuid())
+  userId                String?
+  deviceAuthorizationId String?
+  token                 String                @unique
+  expiresAt             DateTime
+  createdAt             DateTime              @default(now())
+  user                  User?                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceAuthorization   DeviceAuthorization?  @relation(fields: [deviceAuthorizationId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([deviceAuthorizationId])
   @@index([token])
 }
 
@@ -68,7 +71,7 @@ model Funcionario {
   cargoId      String?
   cargo        Cargo?            @relation(fields: [cargoId], references: [id])
   dataAdmissao DateTime?
-  salario      Decimal?          @db.Decimal(12, 2)
+  salario      Decimal?
   status       StatusFuncionario @default(ATIVO)
   observacoes  String?
   createdAt    DateTime          @default(now())
@@ -107,7 +110,7 @@ model Caminhao {
   modelo        String?
   marca         String?
   ano           Int?
-  capacidadeKg  Decimal?       @db.Decimal(12, 2)
+  capacidadeKg  Decimal?
   tipo          String? // truck, carreta, bitrem etc
   status        StatusCaminhao @default(LIBERADO)
   quilometragem Int?
@@ -146,7 +149,7 @@ model Carregamento {
   data        DateTime           @default(now())
   origem      String?
   destino     String?
-  pesoTotal   Decimal            @db.Decimal(14, 3)
+  pesoTotal   Decimal
   status      StatusCarregamento @default(EM_ANDAMENTO)
   observacoes String?
   createdAt   DateTime           @default(now())
@@ -173,8 +176,8 @@ model CarregamentoItem {
   id                   String                 @id @default(cuid())
   carregamentoId       String
   carregamento         Carregamento           @relation(fields: [carregamentoId], references: [id], onDelete: Cascade)
-  quantidade           Decimal                @db.Decimal(14, 3)
-  peso                 Decimal                @db.Decimal(14, 3)
+  quantidade           Decimal
+  peso                 Decimal
   statusItem           StatusItemCarregamento @default(PENDENTE)
   observacao           String?
   ordem                Int                    @default(0)
@@ -187,7 +190,7 @@ model CarregamentoItem {
   mapaUrl              String?
   mapaUrl2             String?
   notaFiscalNome       String?
-  notaFiscalData       Bytes?                 @db.ByteA // legado: será esvaziado após migração para o Blob
+  notaFiscalData       Bytes? // legado: serÃ¡ esvaziado apÃ³s migraÃ§Ã£o para o Blob
   notaFiscalPath       String?
   notaFiscalDisponivel Boolean                @default(false)
 
@@ -208,7 +211,7 @@ model Diaria {
   caminhaoId    String?
   caminhao      Caminhao?   @relation(fields: [caminhaoId], references: [id])
   data          DateTime
-  valor         Decimal     @db.Decimal(12, 2)
+  valor         Decimal
   observacao    String?
   createdById   String
   createdBy     User        @relation("DiariaCreatedBy", fields: [createdById], references: [id])
@@ -339,7 +342,7 @@ model EnderecoFavorito {
 }
 
 // ==========================================
-// AGENDAMENTOS E MANUTENÇÕES PROGRAMADAS
+// AGENDAMENTOS E MANUTENÃ‡Ã•ES PROGRAMADAS
 // ==========================================
 
 enum StatusAgendamentoCarregamento {
@@ -354,7 +357,7 @@ model AgendamentoCarregamento {
   user           User                          @relation("AgendamentoCreatedBy", fields: [userId], references: [id], onDelete: Cascade)
   caminhaoId     String
   caminhao       Caminhao                      @relation(fields: [caminhaoId], references: [id])
-  peso           Decimal                       @db.Decimal(14, 3)
+  peso           Decimal
   dataHora       DateTime
   origem         String
   destino        String
@@ -394,7 +397,7 @@ model ManutencaoProgramada {
 }
 
 // ==========================================
-// NOTIFICAÇÕES PUSH
+// NOTIFICAÃ‡Ã•ES PUSH
 // ==========================================
 
 // ==========================================
@@ -412,7 +415,7 @@ model Lembrete {
   id            String         @id @default(cuid())
   userId        String
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  descricao     String         @db.VarChar(500)
+  descricao     String
   dataHora      DateTime
   status        StatusLembrete @default(PENDENTE)
   enviadoEm     DateTime?
@@ -428,10 +431,10 @@ model PushSubscription {
   id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  endpoint  String   @unique @db.Text
-  p256dh    String   @db.Text
-  auth      String   @db.Text
-  userAgent String?  @db.Text
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -453,18 +456,58 @@ model PasswordResetToken {
 }
 
 model ActivationKey {
-  id           String    @id @default(cuid())
-  code         String    @unique
-  label        String?
-  neverExpires Boolean   @default(false)
-  expiresAt    DateTime?
-  usedAt       DateTime?
-  usedByUserId String?
-  usedByUser   User?     @relation("ActivationKeyUsedBy", fields: [usedByUserId], references: [id], onDelete: SetNull)
-  isActive     Boolean   @default(true)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id                    String                @id @default(cuid())
+  codeHash              String                @unique
+  targetUserId          String?
+  deviceAuthorizationId String?               @unique
+  expiresAt             DateTime?
+  usedAt                DateTime?
+  createdAt             DateTime              @default(now())
+  createdByUserId       String?
+  closedAt              DateTime?
+  closedReason          String?
+  targetUser            User?                 @relation("ActivationKeyTargetUser", fields: [targetUserId], references: [id], onDelete: Cascade)
+  deviceAuthorization   DeviceAuthorization?  @relation(fields: [deviceAuthorizationId], references: [id], onDelete: SetNull)
 
-  @@index([code])
-  @@index([isActive])
+  @@index([targetUserId])
+  @@index([expiresAt])
+}
+
+model DeviceAuthorization {
+  id              String         @id @default(cuid())
+  userId          String?
+  publicKey       String         @unique
+  createdAt       DateTime       @default(now())
+  lastSeenAt      DateTime?
+  revokedAt       DateTime?
+  user            User?          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activationKey   ActivationKey?
+  sessions        Session[]
+
+  @@index([userId])
+  @@index([revokedAt])
+}
+
+model DeviceChallenge {
+  id            String   @id @default(cuid())
+  challengeHash String   @unique
+  publicKey     String
+  purpose       String
+  expiresAt     DateTime
+  usedAt        DateTime?
+  createdAt     DateTime @default(now())
+
+  @@index([publicKey])
+  @@index([expiresAt])
+  @@index([purpose])
+}
+
+model ActivationRateLimit {
+  ipHash          String @id
+  attempts        Int    @default(0)
+  windowStartedAt Int
+  blockedUntil    Int?
+  updatedAt       Int
+
+  @@index([blockedUntil])
 }

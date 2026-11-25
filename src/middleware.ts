@@ -33,7 +33,7 @@ export async function middleware(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname;
   const basePermission = permissionFromPath(pathname.replace(/^\/api\//, "/"));
-  const publicEndpoint = pathname === "/api/health" || pathname === "/api/health/database" || pathname === "/api/auth/login" || pathname === "/api/auth/logout" || pathname === "/api/auth/heartbeat";
+  const publicEndpoint = pathname === "/api/health" || pathname === "/api/health/database" || pathname === "/api/auth/login" || pathname === "/api/auth/logout" || pathname === "/api/auth/heartbeat" || pathname === "/api/devices/challenges" || pathname === "/api/devices/activate";
   if (!basePermission || publicEndpoint || pathname === "/api/users") {
     return withCors(NextResponse.next(), request, requestId);
   }
