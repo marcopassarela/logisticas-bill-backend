@@ -256,59 +256,56 @@ export async function PATCH(
 
       const { itemId, statusItem } = itemStatusBody.data.itemStatus;
 
-      const resultado = await prisma.$transaction(async (tx) => {
-        const atualizado = await tx.carregamentoItem.updateMany({
-          where: { id: itemId, carregamentoId: id },
-          data: { statusItem },
-        });
-
-        if (atualizado.count === 0) {
-          return { itemNaoEncontrado: true as const };
-        }
-
-        const itens = await tx.carregamentoItem.findMany({
-          where: {
-            carregamentoId: id,
-            statusItem: "CARREGADO",
-          },
-          select: { peso: true },
-        });
-
-        const pesoCarregado = itens.reduce(
-          (total, itemAtual) => total + Number(itemAtual.peso),
-          0
-        );
-
-        const caminhao = await tx.caminhao.findUnique({
-          where: { id: atual.caminhaoId },
-          select: { placa: true, capacidadeKg: true },
-        });
-
-        const capacidadeKg = Number(caminhao?.capacidadeKg ?? 0);
-        const excesso =
-          capacidadeKg > 0 && pesoCarregado > capacidadeKg;
-
-        return {
-          itemNaoEncontrado: false as const,
-          avisoExcessoPeso: excesso
-            ? `Atenção: o caminhão ${caminhao?.placa ?? ""} está com ${pesoCarregado.toLocaleString("pt-BR")} kg carregados, acima da capacidade de ${capacidadeKg.toLocaleString("pt-BR")} kg.`
-            : null,
-          detalhesExcessoPeso: excesso
-            ? {
-                placa: caminhao?.placa ?? "",
-                pesoCarregado,
-                capacidadeKg,
-              }
-            : null,
-        };
+      // A alteração já é atômica no updateMany. Manter a transação interativa
+      // aqui fazia cada consulta remota ao Turso esperar a anterior terminar.
+      const atualizado = await prisma.carregamentoItem.updateMany({
+        where: { id: itemId, carregamentoId: id },
+        data: { statusItem },
       });
 
-      if (resultado.itemNaoEncontrado) {
+      if (atualizado.count === 0) {
         return NextResponse.json(
           { error: "Item não encontrado neste carregamento." },
           { status: 404 }
         );
       }
+
+      // São leituras independentes; em paralelo, reduzem uma ida sequencial
+      // ao Turso sem mudar o resultado funcional da validação de peso.
+      const [itens, caminhao] = await Promise.all([
+        prisma.carregamentoItem.findMany({
+          where: {
+            carregamentoId: id,
+            statusItem: "CARREGADO",
+          },
+          select: { peso: true },
+        }),
+        prisma.caminhao.findUnique({
+          where: { id: atual.caminhaoId },
+          select: { placa: true, capacidadeKg: true },
+        }),
+      ]);
+
+      const pesoCarregado = itens.reduce(
+        (total, itemAtual) => total + Number(itemAtual.peso),
+        0
+      );
+
+      const capacidadeKg = Number(caminhao?.capacidadeKg ?? 0);
+      const excesso = capacidadeKg > 0 && pesoCarregado > capacidadeKg;
+      const resultado = {
+        itemNaoEncontrado: false as const,
+        avisoExcessoPeso: excesso
+          ? `Atenção: o caminhão ${caminhao?.placa ?? ""} está com ${pesoCarregado.toLocaleString("pt-BR")} kg carregados, acima da capacidade de ${capacidadeKg.toLocaleString("pt-BR")} kg.`
+          : null,
+        detalhesExcessoPeso: excesso
+          ? {
+              placa: caminhao?.placa ?? "",
+              pesoCarregado,
+              capacidadeKg,
+            }
+          : null,
+      };
 
       after(() => publishDataChanged("carregamentos", "caminhoes", "alertas"));
 
