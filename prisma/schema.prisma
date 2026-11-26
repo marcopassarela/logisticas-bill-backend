@@ -162,6 +162,9 @@ model Carregamento {
   @@index([caminhaoId])
   @@index([motoristaId])
   @@index([ajudanteId])
+  @@index([motoristaId, data, createdAt])
+  @@index([caminhaoId, data, createdAt])
+  @@index([caminhaoId, status])
 }
 
 enum StatusCarregamento {
@@ -196,6 +199,7 @@ model CarregamentoItem {
 
   @@index([carregamentoId, ordem])
   @@index([carregamentoId, notaFiscalDisponivel])
+  @@index([carregamentoId, statusItem])
 }
 
 enum StatusItemCarregamento {

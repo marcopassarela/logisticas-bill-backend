@@ -333,6 +333,11 @@ CREATE INDEX "CarregamentoItem_carregamentoId_ordem_idx" ON "CarregamentoItem"("
 
 -- CreateIndex
 CREATE INDEX "CarregamentoItem_carregamentoId_notaFiscalDisponivel_idx" ON "CarregamentoItem"("carregamentoId", "notaFiscalDisponivel");
+-- Índices adicionais para filtros quentes e atualização de status no Turso.
+CREATE INDEX IF NOT EXISTS "Carregamento_motoristaId_data_createdAt_idx" ON "Carregamento"("motoristaId", "data", "createdAt");
+CREATE INDEX IF NOT EXISTS "Carregamento_caminhaoId_data_createdAt_idx" ON "Carregamento"("caminhaoId", "data", "createdAt");
+CREATE INDEX IF NOT EXISTS "Carregamento_caminhaoId_status_idx" ON "Carregamento"("caminhaoId", "status");
+CREATE INDEX IF NOT EXISTS "CarregamentoItem_carregamentoId_statusItem_idx" ON "CarregamentoItem"("carregamentoId", "statusItem");
 
 -- CreateIndex
 CREATE INDEX "Diaria_data_idx" ON "Diaria"("data");
@@ -402,4 +407,3 @@ CREATE UNIQUE INDEX "PushSubscription_endpoint_key" ON "PushSubscription"("endpo
 
 -- CreateIndex
 CREATE INDEX "PushSubscription_userId_idx" ON "PushSubscription"("userId");
-

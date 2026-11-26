@@ -4,11 +4,6 @@ import { prisma } from "@/lib/prisma";
 export async function gerarAlertasDeAgendamento(): Promise<number> {
   return prisma.$transaction(
     async (tx) => {
-      // Impede duas execuções simultâneas de criarem alertas duplicados.
-      await tx.$queryRaw`
-      SELECT pg_advisory_xact_lock(827364921::bigint) IS NULL AS locked
-    `;
-
       const agora = new Date();
 
       const agendamentos = await tx.agendamentoCarregamento.findMany({

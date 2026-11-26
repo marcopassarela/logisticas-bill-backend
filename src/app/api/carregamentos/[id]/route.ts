@@ -256,23 +256,15 @@ export async function PATCH(
 
       const { itemId, statusItem } = itemStatusBody.data.itemStatus;
 
-      const item = await prisma.carregamentoItem.findFirst({
-        where: { id: itemId, carregamentoId: id },
-        select: { id: true },
-      });
-
-      if (!item) {
-        return NextResponse.json(
-          { error: "Item não encontrado neste carregamento." },
-          { status: 404 }
-        );
-      }
-
       const resultado = await prisma.$transaction(async (tx) => {
-        await tx.carregamentoItem.update({
-          where: { id: itemId },
+        const atualizado = await tx.carregamentoItem.updateMany({
+          where: { id: itemId, carregamentoId: id },
           data: { statusItem },
         });
+
+        if (atualizado.count === 0) {
+          return { itemNaoEncontrado: true as const };
+        }
 
         const itens = await tx.carregamentoItem.findMany({
           where: {
@@ -297,6 +289,7 @@ export async function PATCH(
           capacidadeKg > 0 && pesoCarregado > capacidadeKg;
 
         return {
+          itemNaoEncontrado: false as const,
           avisoExcessoPeso: excesso
             ? `Atenção: o caminhão ${caminhao?.placa ?? ""} está com ${pesoCarregado.toLocaleString("pt-BR")} kg carregados, acima da capacidade de ${capacidadeKg.toLocaleString("pt-BR")} kg.`
             : null,
@@ -309,6 +302,13 @@ export async function PATCH(
             : null,
         };
       });
+
+      if (resultado.itemNaoEncontrado) {
+        return NextResponse.json(
+          { error: "Item não encontrado neste carregamento." },
+          { status: 404 }
+        );
+      }
 
       after(() => publishDataChanged("carregamentos", "caminhoes", "alertas"));
 
