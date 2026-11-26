@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "@/lib/auth";
+import { publishDeviceRevoked } from "@/lib/realtime";
 
 export const runtime = "nodejs";
 
@@ -207,18 +208,55 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: "ID da chave obrigatório." }, { status: 400 });
     }
 
-    const result = await prisma.activationKey.deleteMany({
-      where: { id },
+    const now = new Date();
+    const result = await prisma.$transaction(async (tx) => {
+      const key = await tx.activationKey.findUnique({
+        where: { id },
+        select: { id: true, deviceAuthorizationId: true },
+      });
+
+      if (!key) return null;
+
+      let revokedUserId: string | null = null;
+
+      if (key.deviceAuthorizationId) {
+        const device = await tx.deviceAuthorization.findUnique({
+          where: { id: key.deviceAuthorizationId },
+          select: { id: true, userId: true },
+        });
+
+        if (device) {
+          revokedUserId = device.userId;
+          await tx.deviceAuthorization.update({
+            where: { id: device.id },
+            data: { revokedAt: now },
+          });
+          await tx.session.deleteMany({
+            where: { deviceAuthorizationId: device.id },
+          });
+        }
+      }
+
+      await tx.activationKey.update({
+        where: { id },
+        data: { closedAt: now, closedReason: "REVOKED" },
+      });
+
+      return { revokedUserId };
     });
 
-    if (result.count === 0) {
-      return NextResponse.json(
-        { error: "Chave não encontrada." },
-        { status: 404 },
-      );
+    if (!result) {
+      return NextResponse.json({ error: "Chave não encontrada." }, { status: 404 });
     }
 
-    return NextResponse.json({ ok: true, message: "Registro da chave removido." });
+    if (result.revokedUserId) {
+      await publishDeviceRevoked(result.revokedUserId);
+    }
+
+    return NextResponse.json({
+      ok: true,
+      message: "Chave revogada. O dispositivo precisará de uma nova chave para acessar.",
+    });
   } catch (error) {
     console.error("activation-keys DELETE:", error);
     return NextResponse.json(

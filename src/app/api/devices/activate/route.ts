@@ -80,6 +80,10 @@ export async function POST(request: NextRequest) {
           throw new Error("DEVICE_ALREADY_BOUND");
         }
 
+        await tx.session.deleteMany({
+          where: { deviceAuthorizationId: existing.id },
+        });
+
         device = await tx.deviceAuthorization.update({
           where: { id: existing.id },
           data: { revokedAt: null, lastSeenAt: now },

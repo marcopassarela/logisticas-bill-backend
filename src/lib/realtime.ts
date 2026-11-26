@@ -39,6 +39,10 @@ export function publishDataChanged(...modules: string[]) {
   return publish("data:changed", { modules });
 }
 
+export function publishDeviceRevoked(userId: string) {
+  return publish("auth:device-revoked", { userId });
+}
+
 export function publishAuthInvalidated() {
   return publish("auth:invalidate", {
     reason: "password_changed",
