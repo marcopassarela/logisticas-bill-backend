@@ -182,6 +182,7 @@ model CarregamentoItem {
   quantidade           Decimal
   peso                 Decimal
   statusItem           StatusItemCarregamento @default(PENDENTE)
+  entregue             Boolean                @default(false)
   observacao           String?
   ordem                Int                    @default(0)
   descricaoLivre       String?
