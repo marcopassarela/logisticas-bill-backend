@@ -332,7 +332,7 @@ export async function PATCH(
       body !== null &&
       "entregaStatus" in body
     ) {
-      if (!canAccess(user.role, user.permissions, "carregamentos.alterarStatus")) {
+      if (!canAccess(user.role, user.permissions, "carregamentos.marcarEntregue")) {
         return NextResponse.json(
           { error: "Você não tem permissão para alterar a entrega." },
           { status: 403 }
