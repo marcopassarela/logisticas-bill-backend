@@ -201,6 +201,18 @@ model CarregamentoItem {
   @@index([carregamentoId, ordem])
   @@index([carregamentoId, notaFiscalDisponivel])
   @@index([carregamentoId, statusItem])
+
+  adicionais CarregamentoAdicional[]
+}
+
+model CarregamentoAdicional {
+  id        String           @id @default(cuid())
+  itemId    String
+  item      CarregamentoItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  descricao String
+  ordem     Int              @default(0)
+
+  @@index([itemId, ordem])
 }
 
 enum StatusItemCarregamento {

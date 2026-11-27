@@ -21,7 +21,12 @@ const statusItemSchema = z.enum([
   "NAO_CARREGADO",
 ]);
 
+const adicionalSchema = z.object({
+  descricao: z.string().trim().min(1).max(1000),
+});
+
 const itemSchema = z.object({
+  adicionais: z.array(adicionalSchema).optional(),
   id: z.string().optional(),
   descricaoLivre: z.string().nullable().optional(),
   ordemServico: z.string().nullable().optional(),
@@ -124,6 +129,14 @@ async function obterCarregamento(id: string) {
           mapaUrl: true,
           mapaUrl2: true,
           notaFiscalNome: true,
+          adicionais: {
+            orderBy: [{ ordem: "asc" }, { id: "asc" }],
+            select: {
+              id: true,
+              descricao: true,
+              ordem: true,
+            },
+          },
         },
       },
     },
@@ -519,12 +532,33 @@ export async function PATCH(
           mapaUrl2: item.mapaUrl2 || null,
         };
 
+        let itemId: string;
+
         if (item.id) {
           // Não altera notaFiscalNome nem notaFiscalData.
           await tx.carregamentoItem.update({
             where: { id: item.id },
             data: itemData,
           });
+          itemId = item.id;
+
+          // Só substitui os adicionais quando o campo foi enviado.
+          // Assim, clientes antigos não apagam adicionais existentes.
+          if (item.adicionais !== undefined) {
+            await tx.carregamentoAdicional.deleteMany({
+              where: { itemId },
+            });
+
+            for (const [ordem, adicional] of item.adicionais.entries()) {
+              await tx.carregamentoAdicional.create({
+                data: {
+                  itemId,
+                  descricao: adicional.descricao,
+                  ordem,
+                },
+              });
+            }
+          }
         } else {
           const novoItem = await tx.carregamentoItem.create({
             data: {
@@ -532,7 +566,19 @@ export async function PATCH(
               ...itemData,
             },
           });
+
+          itemId = novoItem.id;
           idsRecebidos.push(novoItem.id);
+
+          for (const [ordem, adicional] of (item.adicionais ?? []).entries()) {
+            await tx.carregamentoAdicional.create({
+              data: {
+                itemId,
+                descricao: adicional.descricao,
+                ordem,
+              },
+            });
+          }
         }
       }
 
@@ -580,6 +626,14 @@ export async function PATCH(
               mapaUrl: true,
           mapaUrl2: true,
               notaFiscalNome: true,
+              adicionais: {
+                orderBy: [{ ordem: "asc" }, { id: "asc" }],
+                select: {
+                  id: true,
+                  descricao: true,
+                  ordem: true,
+                },
+              },
             },
           },
         },

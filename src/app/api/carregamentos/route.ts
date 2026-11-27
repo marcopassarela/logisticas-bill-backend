@@ -7,7 +7,12 @@ import { requirePermission } from "@/lib/authorization";
 import { decodePdfDataUrl } from "@/lib/pdf-storage";
 import { put } from "@vercel/blob";
 
+const adicionalSchema = z.object({
+  descricao: z.string().trim().min(1).max(1000),
+});
+
 const itemSchema = z.object({
+  adicionais: z.array(adicionalSchema).default([]),
   quantidade: z.coerce.number().positive(),
   peso: z.coerce.number().min(0),
   statusItem: z.enum(["PENDENTE", "CARREGADO", "NAO_CARREGADO"]).default("PENDENTE"),
@@ -84,6 +89,14 @@ export async function GET(req: NextRequest) {
           mapaUrl: true,
           mapaUrl2: true,
           notaFiscalNome: true,
+          adicionais: {
+            orderBy: [{ ordem: "asc" }, { id: "asc" }],
+            select: {
+              id: true,
+              descricao: true,
+              ordem: true,
+            },
+          },
         },
       },
     },
@@ -197,6 +210,12 @@ export async function POST(req: NextRequest) {
               notaFiscalNome: i.notaFiscalNome || null,
               notaFiscalDisponivel: false,
               notaFiscalData: null,
+              adicionais: {
+                create: i.adicionais.map((adicional, ordem) => ({
+                  descricao: adicional.descricao,
+                  ordem,
+                })),
+              },
             })),
           },
         },

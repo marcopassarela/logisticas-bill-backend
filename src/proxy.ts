@@ -22,7 +22,7 @@ function withCors(response: NextResponse, request: NextRequest, requestId: strin
   return response;
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const requestId = request.headers.get("x-request-id") || crypto.randomUUID();
   if (request.method === "OPTIONS") {
     const response = withCors(new NextResponse(null, { status: 204 }), request, requestId);
