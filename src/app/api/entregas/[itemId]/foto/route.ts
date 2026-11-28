@@ -67,7 +67,7 @@ export async function GET(
       blob.statusCode !== 200 ||
       blob.blob.contentType !== "image/webp" ||
       blob.blob.size <= 0 ||
-      blob.blob.size > 350 * 1024
+      blob.blob.size > 2 * 1024 * 1024
     ) {
       return NextResponse.json({ error: "Comprovante não encontrado." }, { status: 404 });
     }

@@ -9,11 +9,11 @@ import { put, del } from "@vercel/blob";
 export const runtime = "nodejs";
 
 const MAX_IMAGE_SIZE = 8 * 1024 * 1024;
-const MAX_WEBP_SIZE = 350 * 1024;
+const MAX_WEBP_SIZE = 2 * 1024 * 1024;
 
 async function converterParaWebP(bytes: Buffer): Promise<Buffer> {
-  const resolucoes = [1600, 1400, 1200, 1000, 900, 800, 700, 600, 500, 400];
-  const qualidades = [80, 72, 64, 56, 48, 40, 32, 24];
+  const resolucoes = [2560, 2400, 2200, 2000, 1800, 1600, 1400, 1200];
+  const qualidades = [90, 86, 82, 78, 74, 70, 66];
 
   for (const largura of resolucoes) {
     for (const qualidade of qualidades) {
@@ -34,7 +34,7 @@ async function converterParaWebP(bytes: Buffer): Promise<Buffer> {
     }
   }
 
-  throw new Error("Não foi possível reduzir a fotografia para até 350 KB.");
+  throw new Error("Não foi possível reduzir a fotografia para até 2 MB.");
 }
 
 export async function POST(
