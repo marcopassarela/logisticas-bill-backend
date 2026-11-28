@@ -182,8 +182,15 @@ model CarregamentoItem {
   quantidade           Decimal
   peso                 Decimal
   statusItem           StatusItemCarregamento @default(PENDENTE)
-  entregue             Boolean                @default(false)
-  observacao           String?
+  entregue                  Boolean   @default(false)
+  entregaFotoPath           String?
+  entregaFotoNome           String?
+  entregaFotoCriadaEm       DateTime?
+  entregueEm                DateTime?
+  entregaObservacao         String?
+  entregaConfirmadaPorId    String?
+  entregaConfirmadaPorNome  String?
+  observacao                String?
   ordem                Int                    @default(0)
   descricaoLivre       String?
   ordemServico         String?
@@ -201,6 +208,8 @@ model CarregamentoItem {
   @@index([carregamentoId, ordem])
   @@index([carregamentoId, notaFiscalDisponivel])
   @@index([carregamentoId, statusItem])
+  @@index([entregaFotoCriadaEm])
+  @@index([entregue, entregueEm])
 
   adicionais CarregamentoAdicional[]
 }

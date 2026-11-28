@@ -326,52 +326,17 @@ export async function PATCH(
       return NextResponse.json(resultado);
     }
 
-    // Atualização individual da confirmação de entrega.
+    // A conclusão agora exige fotografia pelo endpoint de comprovante.
     if (
       typeof body === "object" &&
       body !== null &&
       "entregaStatus" in body
     ) {
-      if (!canAccess(user.role, user.permissions, "carregamentos.marcarEntregue")) {
-        return NextResponse.json(
-          { error: "Você não tem permissão para alterar a entrega." },
-          { status: 403 }
-        );
-      }
-
-      const entregaBody = z.object({
-        entregaStatus: z.object({
-          itemId: z.string().min(1),
-          entregue: z.boolean(),
-        }),
-      }).safeParse(body);
-
-      if (!entregaBody.success) {
-        return NextResponse.json(
-          { error: "Dados da entrega inválidos." },
-          { status: 400 }
-        );
-      }
-
-      const { itemId, entregue } = entregaBody.data.entregaStatus;
-
-      const atualizado = await prisma.carregamentoItem.updateMany({
-        where: { id: itemId, carregamentoId: id },
-        data: { entregue },
-      });
-
-      if (atualizado.count === 0) {
-        return NextResponse.json(
-          { error: "Item não encontrado neste carregamento." },
-          { status: 404 }
-        );
-      }
-
-      after(() => publishDataChanged("carregamentos"));
-
-      return NextResponse.json({ ok: true, itemId, entregue });
+      return NextResponse.json(
+        { error: "A conclusão exige uma fotografia. Utilize o fluxo de comprovante de entrega." },
+        { status: 400 }
+      );
     }
-
     // Atualização somente do status geral.
     if (
       typeof body === "object" &&
